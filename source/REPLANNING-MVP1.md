@@ -1,4 +1,4 @@
-# REPLANNING — Family Calendar MVP 1.0 落地版
+# REPLANNING — Family Calendar System MVP 1.0 落地版
 > 日期：2026-10-23
 > 基準：Family_Calendar_System_Requirements_v3.docx (最新) + v2.xlsx + 手稿xlsx + GitHub repo 現狀
 > 目標：由「諗到」變「屋企人下星期用得到」嘅制成品
@@ -133,4 +133,4 @@ Storage：
 - Week 4 後：根據試用，決定 Phase 2 回憶錄 / Phase 3 本地 embedding
 
 ---
-備註：本文件係基於 v3.docx 獨立可讀版 + 你 GitHub Copilot 包 + 早前關於圖片私隱/Notebook 做 DB 嘅討論整理，目的係令 MVP 1.0 可落地成制成品，而非再加功能。
+備註：本文件係基於 v3.docx 獨立可讀版 + Family Calendar System MVP 專案文件 + 早前關於圖片私隱/Notebook 做 DB 嘅討論整理，目的係令 MVP 1.0 可落地成制成品，而非再加功能。

@@ -1,11 +1,11 @@
-# Copilot 準備包 — Family Calendar System MVP
+# Family Calendar System MVP
 
 > 日期：2026-10-21
 > 用途：放入 VS Code + GitHub Copilot 嘅 project repo，作為生成 project 基礎嘅依據
 
-## 點用呢個包
+## 專案使用方式
 
-1. 將整個內容解壓到 repo 根目錄（`.github/` 同 `source/` 兩個資料夾）
+1. 喺 VS Code 開啟 `Family Calendar System MVP` 專案資料夾作為 repo 根目錄
 2. 開 VS Code，Copilot 會自動讀取 `.github/copilot-instructions.md`（repo 級指令，適用所有 chat 請求）
 3. 叫 Copilot 按 `source/BUILD_PLAN.md` 順序逐個 task 做，每個 task 開始前先讀 `source/` 入面嘅文件
 
