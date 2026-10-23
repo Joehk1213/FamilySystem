@@ -373,6 +373,7 @@ async function prepareFixtures(service) {
       .in('id', [
         recordIds.privateApprovalPlan,
         recordIds.outsiderPlan,
+        recordIds.ungrantedPlan,
         recordIds.grantedPlan,
         recordIds.experienceApprovalPlan,
       ]),
@@ -657,6 +658,17 @@ async function runTests(service, accounts, versionById) {
   );
   assertionCount += 1;
 
+  const unreadableChangeRequest = await worker
+    .from('schedule_change_requests')
+    .insert({
+      id: workerChangeRequestId,
+      family_id: FAMILY_ID,
+      record_id: recordIds.ungrantedPlan,
+      record_version: versionById[recordIds.ungrantedPlan],
+      requested_changes: { title: 'Unauthorized fictional title' },
+      requested_by: accounts.worker.id,
+    })
+    .select('id');
   const changeRequest = unwrap(
     await worker
       .from('schedule_change_requests')
@@ -735,13 +747,16 @@ async function runTests(service, accounts, versionById) {
     'Checking approved request state',
   );
   assert(
-    (Boolean(directRequestUpdate.error) || directRequestUpdate.data.length === 0)
+    (Boolean(unreadableChangeRequest.error)
+      || !unreadableChangeRequest.data?.length)
+      && (Boolean(directRequestUpdate.error)
+        || directRequestUpdate.data.length === 0)
       && Boolean(staleApproval.error)
       && !successfulApproval.error
       && approvedPlan.title === 'Approved fictional title'
       && approvedRequest.status === 'approved'
       && approvedRequest.decided_by === accounts.master.id,
-    'Test 10 failed: direct request update or stale approval was accepted.',
+    'Test 10 failed: unauthorized request, direct update, or stale approval was accepted.',
   );
   assertionCount += 1;
 
