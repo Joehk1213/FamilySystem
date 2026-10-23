@@ -1,0 +1,19 @@
+{
+  "name": "family-calendar-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Family Calendar System MVP",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "seed": "node scripts/seed.js",
+    "test:rls": "node scripts/test-rls.js",
+    "test:recurring": "node scripts/test-recurring-schedule.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.8",
+    "express": "^5.3.0"
+  }
+}

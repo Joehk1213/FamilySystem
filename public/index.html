@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-HK">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f9fafb">
+    <title>家庭日曆</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="site-header">
+        <a class="brand" href="/" aria-label="Family Calendar home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <rect x="3.5" y="5.5" width="17" height="15" rx="3" stroke="currentColor" stroke-width="1.8"/>
+              <path d="M7.5 3.5v4M16.5 3.5v4M4 10h16M8 14h3M8 17h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span data-i18n="brand">家庭日曆</span>
+        </a>
+        <span class="header-caption">
+          <span class="header-indicator" aria-hidden="true"></span>
+          <span data-i18n="tagline">一家人的生活記錄</span>
+        </span>
+      </header>
+      <section id="app" class="app-card" aria-live="polite" aria-busy="true">
+        <p class="loading-message">正在載入…</p>
+      </section>
+      <footer class="site-footer">
+        <span data-i18n="footer">Family Calendar MVP</span>
+      </footer>
+    </main>
+    <template id="quick-chip-template">
+      <button class="quick-chip" type="button"></button>
+    </template>
+    <template id="weekly-day-template">
+      <section class="weekly-day-card">
+        <header class="weekly-day-heading">
+          <h3 data-weekday></h3>
+          <span class="weekly-day-count" data-day-count></span>
+        </header>
+        <ul class="weekly-events" data-schedule-items></ul>
+        <p class="weekly-empty-day" data-empty-day hidden></p>
+      </section>
+    </template>
+    <template id="monthly-day-template">
+      <div class="monthly-calendar-day" role="gridcell">
+        <button class="calendar-day-button" type="button" data-calendar-date>
+          <span class="calendar-day-number" data-calendar-day-number></span>
+          <span class="calendar-day-count" data-calendar-day-count></span>
+          <span class="calendar-day-events" data-calendar-events></span>
+        </button>
+      </div>
+    </template>
+  </body>
+</html>

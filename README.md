@@ -1,0 +1,90 @@
+# Copilot 準備包 — Family Calendar System MVP
+
+> 日期：2026-10-21
+> 用途：放入 VS Code + GitHub Copilot 嘅 project repo，作為生成 project 基礎嘅依據
+
+## 點用呢個包
+
+1. 將整個內容解壓到 repo 根目錄（`.github/` 同 `source/` 兩個資料夾）
+2. 開 VS Code，Copilot 會自動讀取 `.github/copilot-instructions.md`（repo 級指令，適用所有 chat 請求）
+3. 叫 Copilot 按 `source/BUILD_PLAN.md` 順序逐個 task 做，每個 task 開始前先讀 `source/` 入面嘅文件
+
+## 閱讀次序
+
+1. `source/PRD_MVP.md` — MVP 做乜、唔做乜
+2. `source/DB_SCHEMA_DRAFT.sql` + `source/DB_DESIGN.md` — 資料庫結構同權限規格
+3. `source/CONVENTIONS.md` — 代碼規範
+4. `source/REFERENCES.md` — 參考項目（tutorial repo）可借鏡嘅結構模式
+5. `source/BUILD_PLAN.md` — 生成次序
+
+## 狀態標示
+
+- 【已確認】：用戶已拍板嘅需求
+- 【建議方案】：基於已確認答案整理嘅建議
+- 【沿用草案】：Excel v2 原有嘅技術選擇，未重新確認
+- 【待確認】：未決定（例如：私人日記私隱層次、MFA 實作）
+
+## 重要提醒
+
+- `DB_SCHEMA_DRAFT.sql` 係**未驗證草稿，唔係正式 migration**：RLS 政策同審批函式仲未實作，要按 `DB_DESIGN.md` 第 7 節測試清單實作並通過
+- 開發全程只用**假資料**；唔好放真實個人資料（相片、地址、證件）入開發環境
+- 已核實嘅原生 Copilot 指令入口係 `.github/copilot-instructions.md`（見 [VS Code 官方文件](https://code.visualstudio.com/docs/agent-customization/custom-instructions)）；原本嘅 `system-prompt.json`、`gpt-6luna` 型號同入面嘅參數係咪受你用緊嘅擴充套件支援，仍須自行確認 —— 規則已經搬晒入 `.github/copilot-instructions.md`，原 JSON 可以留俾其他工具用
+
+## 階段 2：本地資料庫與測試種子
+
+Migration `supabase/migrations/20261022000000_initial_schema.sql` 由未驗證草稿複製而來，只可先套用到本地或測試 Supabase project。它會啟用 schema 草稿指定的 RLS，並建立 private `family-attachments` bucket；目前沒有 `storage.objects` 放行政策，所以物件讀寫預設全部拒絕。待階段 3 建立 `can_read_record` 並通過權限測試後，才加入按記錄權限和 object path 驗證的 Storage 政策。此 migration 不可視為已驗證的正式 schema。
+
+1. 安裝 Supabase CLI，並在 repo 根目錄執行 `npx supabase init` 建立 CLI 設定檔；若已有 `supabase/config.toml`，毋須重複初始化。
+2. 使用本地 Supabase 時，執行 `npx supabase start`，再執行 `npx supabase db reset` 套用 migrations。只用測試 project 時，先執行 `npx supabase login`，再執行 `npx supabase link --project-ref PROJECT_REF`，將 `PROJECT_REF` 換成測試 project ref，最後執行 `npx supabase db push`。
+3. 複製 `.env.example` 為 `.env`，填入測試 project 的 `SUPABASE_URL`、`SUPABASE_ANON_KEY`、`SUPABASE_SERVICE_ROLE_KEY`，並設定只供虛構測試帳戶使用的 `SEED_TEST_USER_PASSWORD`。不可使用真實帳戶密碼；`.env` 已加入 `.gitignore`。
+4. 在 repo 根目錄執行 `npm run seed`。腳本只會建立或更新固定的 `@family-calendar.test` Auth 帳戶、profiles、Test Family 和六位成員，不會刪除資料。每次重跑會把四個測試帳戶密碼重設為 `SEED_TEST_USER_PASSWORD`。
+
+種子腳本只在手動執行時使用 `SUPABASE_SERVICE_ROLE_KEY`，不得放入前端或一般伺服器請求。執行前必須先套用 migration；migration 和種子資料尚未連接 Supabase project 實測。
+
+## 階段 3：RLS 權限驗證
+
+Migration `supabase/migrations/20261022000100_rls_policies.sql` 實作記錄讀寫判斷、核心資料表 RLS、跨家庭關聯防護、私有 Storage 物件政策，以及受控 `approve_schedule_change` 函式。沒有明確放行政策的操作（例如一般用戶刪除 family member、直接更新/刪除改行程請求）會被 RLS 預設拒絕；受控 service-role 管理不屬一般用戶請求。先在隔離的本地或測試 project 套用全部 migrations；不要把未完成測試的權限規則部署到正式資料。
+
+角色初始化注意：`DB_DESIGN.md` 指定初始 Admin 需由 service role 建立，但階段 2 測試家庭只建立 Master/Worker/Pending 成員。不要自行把 Master 改成 Admin；正式測試流程要先按核准的帳戶安排建立一位 Admin，否則沒有 authenticated 使用者可以審批 `family_members`。
+
+在 `.env` 設定上述測試 project 的 URL/key，另設只供虛構測試帳戶使用的 `RLS_TEST_PASSWORD`，並把 `RLS_TEST_PROJECT_CONFIRM` 設為 `I_AM_USING_A_DISPOSABLE_TEST_PROJECT`，然後執行 `npm run test:rls`。腳本以 service role 建立固定虛構測試家庭、身份及 fixture；所有權限斷言都使用各測試帳戶登入後取得的 authenticated client。測試會建立測試帳戶和資料，確認字串是避免誤指正式環境的保護措施；請只在可丟棄的測試 project 執行。腳本依序驗證 `source/DB_DESIGN.md` 第 7 節的 13 項測試，亦測試有效審批成功及一般使用者不可直接更新申請。
+
+目前環境沒有 `.env`、Supabase CLI 或資料庫連線，因此 migration/RLS 測試尚未連線執行；JavaScript 語法檢查不代表資料庫權限已通過。
+
+## 階段 4：登入與角色申請
+
+1. 在 `.env` 設定 `SUPABASE_URL`、`SUPABASE_ANON_KEY`、`FAMILY_ID` 及 `PORT`。`FAMILY_ID` 必須是這個單家庭應用所屬的 `families.id`；`/api/config` 只會回傳 Supabase URL、anon key 和 family UUID，不會回傳 service-role key。靜態頁面以 esm.sh 載入固定版本 `@supabase/supabase-js`，瀏覽器需能連線至該 CDN。
+2. 在 Supabase Auth 啟用 Google provider，並按 Supabase/Google OAuth 設定填妥 OAuth client；把本機 `http://localhost:3000`（部署時用實際 HTTPS 網址）加入 Auth redirect URLs，Google OAuth callback 使用 Supabase 專案提供的 callback URL。
+3. 執行 `npm start`，開啟 `http://localhost:3000`。登入後前端會以 authenticated client 查詢 `profiles` 和 `family_members`。沒有成員申請的用戶可提交 master、worker 或 guest 申請；資料庫註冊 trigger 負責自動建立 profile。
+4. `pending` 只顯示申請狀態，`disabled` 只顯示停用狀態；兩者均不呈現系統功能。Admin 可批准（`status=active`、`role=requested_role`）或拒絕（因 schema 沒有 rejected 狀態，設為 `disabled`）。按 DB_DESIGN 的 family_members UPDATE RLS，Master 可檢視申請但不可批准或拒絕；審批保留登入者 JWT，沒有使用 service role。
+5. 所有登入狀態均可登出；成功登出後導回 `/`。Worker（包括正在申請 Worker 的用戶）介面使用英文，其餘使用繁體中文（香港）。
+
+Admin 初始化仍需先以受控 service-role 初始化程序建立；階段 2 的虛構 seed 依建造計劃只建立 Master/Worker/Pending 成員，並不會自動提供可登入審批的 Admin。不得把 service-role key 放入瀏覽器。
+
+## 階段 5：Records CRUD
+
+1. 確認已套用 Schema 和 RLS migrations，並在 `.env` 設定 `SUPABASE_URL`、`SUPABASE_ANON_KEY`、`FAMILY_ID`；一般伺服器請求不讀取或使用 `SUPABASE_SERVICE_ROLE_KEY`。
+2. 啟動 `npm start` 並以已批准的 Google 帳戶登入。記錄 API 會驗證 `Authorization: Bearer <user JWT>`，再用 Supabase anon key 加使用者 JWT 查詢資料；資料庫 RLS 仍是最終權限檢查。
+3. `GET /api/records` 依 RLS 載入可見記錄及附件資料；`POST /api/records` 新增記錄；`PATCH /api/records/:recordId` 編輯；`DELETE /api/records/:recordId` 刪除記錄及 private Storage 物件；`POST /api/records/:recordId/attachments` 上載附件。所有端點均回傳 `{ success, data, message }`。
+4. Master/Admin 可建立有效的 plan/schedule 或 experience 類型；Worker 僅可建立 experience/diary 或 experience/photo，並只可編輯自己建立且可編輯的記錄。可關聯計劃必須是同家庭、且目前使用者可讀取的 plan。Guest 不可新增或修改記錄。
+5. 附件每個最多 10 MB，存放路徑為 `{family_id}/{record_id}/{filename}`，bucket `family-attachments` 維持 private。上載後同時寫入 `attachments` metadata；Metadata 寫入失敗時會嘗試移除剛上載的 Storage object。
+
+私人記錄仍只依現有 RLS 限制讀取；私人日記的應用層隔離／用戶端加密方案未決，相關程式保留 TODO，未視為安全方案已驗收。記錄刪除涉及 Storage 與 Postgres 兩個服務，非單一 transaction；若 Storage object 已移除但資料列刪除失敗，需檢視伺服器錯誤並重新上載附件。此階段目前未連線 Supabase project，因此真實 RLS/Auth/Storage 行為仍需在 disposable test project 驗證。
+
+## FR011：行程修改申請與審批
+
+> `BUILD_PLAN.md` 將 FR011 列於階段 7；以下按功能名稱記錄，不更改該計劃文件。
+
+1. Worker 只會在自己可讀取的非私人 plan 上看到「申請修改行程」。表單只送出勾選欄位，白名單為 `title`、`content`、`event_start`、`event_end`、`is_all_day`、`status`。
+2. 前端使用登入者 Supabase client 插入 `schedule_change_requests`，傳入當前 plan 的 `row_version` 及登入者 ID。RLS/trigger 仍會驗證身份、家庭、plan、可見性、白名單與版本；版本已變更時會拒絕舊請求。
+3. Admin/Master 以 authenticated client 查詢本家庭 pending queue。批准及拒絕都只呼叫 `approve_schedule_change(request_id, approve, note)`；不會直接更新 `schedule_change_requests` 或 `records`。函式負責鎖定、權限、版本核對及白名單套用。
+4. Queue 可手動重新載入。現有 Schema 沒有通知表／通知服務，因此提供佇列但不發送推播或電郵。Supabase OAuth/RLS/RPC 尚未在本機測試 project 實測。
+
+## FR011：行程修改申請與審批
+
+> `BUILD_PLAN.md` 將 FR011 列於階段 7；以下按功能名稱記錄，不更改該計劃文件。
+
+1. Worker 只會在自己可讀取的非私人 plan 上看到「申請修改行程」。表單只提交使用者勾選的欄位，白名單為 `title`、`content`、`event_start`、`event_end`、`is_all_day`、`status`；其他欄位不會寫入。
+2. 前端以登入者 Supabase client 插入 `schedule_change_requests`，記錄當前 plan 的 `row_version` 及 `requested_by`。資料庫 trigger/RLS 仍會驗證家庭、plan、可見性、身份、白名單與版本；版本已變更時需重新載入最新行程再申請。
+3. Admin/Master 以 authenticated client 查詢本家庭的 pending queue。批准及拒絕都只呼叫 `approve_schedule_change(request_id, approve, note)`；不會直接更新 `schedule_change_requests` 或 `records`。資料庫函式負責鎖定、權限、版本核對及白名單套用。
+4. Queue 可手動重新載入。現有 Schema 沒有通知表／通知服務，因此本階段提供佇列而不發送推播或電郵；Supabase OAuth/RLS/RPC 尚未在本機測試 project 實測。
