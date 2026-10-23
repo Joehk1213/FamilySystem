@@ -3548,4 +3548,16 @@ async function loadApplication() {
 }
 
 setLanguage('zh');
-loadApplication();
+if (['/login', '/today', '/record/new', '/approve'].includes(window.location.pathname)) {
+  import('./mvp-pages.js')
+    .then(({ startMvpPages }) => startMvpPages())
+    .catch((error) => {
+      console.error('Failed to load MVP pages:', error);
+      appRoot.innerHTML = `
+        <h1>無法載入應用程式</h1>
+        <p class="notice notice-error" role="alert">${escapeHtml(error.message)}</p>
+      `;
+    });
+} else {
+  loadApplication();
+}

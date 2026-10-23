@@ -1,6 +1,13 @@
 function startServer() {
   try {
-    require('dotenv').config();
+    const hasPublicSupabaseConfig = [
+      'SUPABASE_URL',
+      'SUPABASE_ANON_KEY',
+      'FAMILY_ID',
+    ].every((key) => process.env[key]);
+    if (!hasPublicSupabaseConfig) {
+      require('dotenv').config();
+    }
 
     const cors = require('cors');
     const express = require('express');
@@ -11,7 +18,7 @@ function startServer() {
     const telegramRouter = require('./routes/telegram');
     const apiErrorHandler = require('./middleware/apiErrorHandler');
     const app = express();
-    const port = process.env.PORT || 3002;
+    const port = process.env.PORT || 3000;
 
     app.use(cors());
     app.use(express.json());
@@ -19,6 +26,13 @@ function startServer() {
     app.use(healthRouter);
     app.use(recordsRouter);
     app.use(telegramRouter);
+    app.get(['/login', '/today', '/record/new', '/approve'], (req, res, next) => {
+      res.sendFile(path.join(__dirname, '..', 'public', 'index.html'), (error) => {
+        if (error) {
+          next(error);
+        }
+      });
+    });
     app.use(express.static(path.join(__dirname, '..', 'public')));
     app.use(apiErrorHandler);
 

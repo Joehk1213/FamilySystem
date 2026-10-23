@@ -5,6 +5,7 @@
   "description": "Family Calendar System MVP",
   "main": "server/index.js",
   "scripts": {
+    "dev": "node server/index.js",
     "start": "node server/index.js",
     "seed": "node scripts/seed.js",
     "test:rls": "node scripts/test-rls.js",
