@@ -227,22 +227,39 @@ async function main() {
   );
   console.log('Test 2 passed: master approved the request and the plan was updated.');
 
+  const thirdVersion = unwrap(
+    await service
+      .from('records')
+      .update({ content: 'Second fictional change after the request' })
+      .eq('id', RECORD_ID)
+      .select('row_version')
+      .single(),
+    'Advancing the fictional plan to row_version 3',
+  );
+  assert(
+    thirdVersion.row_version === 3,
+    `Expected the fictional plan to reach row_version 3, got ${thirdVersion.row_version}.`,
+  );
+
   const staleApproval = await master.rpc('approve_schedule_change', {
     p_request_id: staleRequest.id,
   });
   const staleRequestState = unwrap(
     await service
       .from('schedule_change_requests')
-      .select('status')
+      .select('status, record_version')
       .eq('id', staleRequest.id)
       .single(),
     'Checking stale request state',
   );
   assert(
-    Boolean(staleApproval.error) && staleRequestState.status === 'pending',
-    'Test 3 failed: approval with an outdated row_version was accepted.',
+    Boolean(staleApproval.error)
+      && staleRequestState.status === 'pending'
+      && staleRequestState.record_version === 1
+      && thirdVersion.row_version === 3,
+    'Test 3 failed: a row_version 1 request was not rejected after the plan advanced to version 3.',
   );
-  console.log('Test 3 passed: approval with an outdated row_version was rejected.');
+  console.log('Test 3 passed: row_version 1 approval was rejected after the plan advanced to version 3.');
 }
 
 main().catch((error) => {

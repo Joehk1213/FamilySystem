@@ -47,7 +47,41 @@ Migration `supabase/migrations/20261022000100_rls_policies.sql` 實作記錄讀�
 
 角色初始化注意：`DB_DESIGN.md` 指定初始 Admin 需由 service role 建立，但階段 2 測試家庭只建立 Master/Worker/Pending 成員。不要自行把 Master 改成 Admin；正式測試流程要先按核准的帳戶安排建立一位 Admin，否則沒有 authenticated 使用者可以審批 `family_members`。
 
-在 `.env` 設定上述測試 project 的 URL/key，另設只供虛構測試帳戶使用的 `RLS_TEST_PASSWORD`，並把 `RLS_TEST_PROJECT_CONFIRM` 設為 `I_AM_USING_A_DISPOSABLE_TEST_PROJECT`，然後執行 `npm run test:rls`。腳本以 service role 建立固定虛構測試家庭、身份及 fixture；所有權限斷言都使用各測試帳戶登入後取得的 authenticated client。測試會建立測試帳戶和資料，確認字串是避免誤指正式環境的保護措施；請只在可丟棄的測試 project 執行。腳本依序驗證 `source/DB_DESIGN.md` 第 7 節的 13 項測試，亦測試有效審批成功及一般使用者不可直接更新申請。
+在 `.env` 設定上述測試 project 的 URL/key，另設只供虛構測試帳戶使用的 `RLS_TEST_PASSWORD`，並把 `RLS_TEST_PROJECT_CONFIRM` 設為 `I_AM_USING_A_DISPOSABLE_TEST_PROJECT`，然後執行 `node scripts/test-rls.js`。腳本以 service role 建立固定虛構測試家庭、身份及 fixture；所有權限斷言都使用各測試帳戶登入後取得的 authenticated client。測試會建立測試帳戶和資料，請只在可丟棄的本機／測試 project 執行。RLS 測試目前有 15 項檢查，包括 Guest 唯讀、私密日記隔離、不可讀行程的 Worker 申請及附件 10 MiB 限制；Guest 修改請求權限缺口會令測試失敗，須先修正 RLS migration 才可視為全綠。
+
+## MVP 1.0 雙 Notebook 快速開始
+
+本文按**公司 Notebook 為 Primary、屋企 `JOE-Desktop` 為 recovery node**。兩部機各自運行本機 Supabase；OneDrive 傳送 CMS 加密備份，唔係即時複寫。完整架構、Tailscale 限制、憑證安裝及 Only-if-empty 還原流程見 [雙 Notebook 設定](docs/DUAL_NB_SETUP.md)。
+
+Primary 本機開發：
+
+```powershell
+npm ci
+npx supabase start
+# 以 npx supabase status -o env 取得本機設定，存入本機 .env；唔好提交或分享 key。
+npm run seed
+npm run dev
+```
+
+本機帳戶及測試密碼見 [家庭使用指南](docs/FAMILY_USER_GUIDE.md)。確認本機 Supabase 測試環境後，執行：
+
+```powershell
+node scripts/test-rls.js
+node scripts/test-approve.js
+```
+
+GitHub Actions 的 [MVP CI](.github/workflows/mvp-ci.yml) 會在 runner 啟動本機 Supabase、seed 虛構帳戶，再執行兩個 Node 測試；不使用 Playwright。
+
+## 工作排程器身份分工
+
+| 工作 | 身份 |
+|---|---|
+| Wi‑Fi 啟動／每 5 分鐘檢查 | 已登入的互動式使用者，Captive Portal 才可開瀏覽器 |
+| Supabase watchdog | SYSTEM；若 Docker Desktop 是 per-user，SYSTEM 可能無法連 Docker daemon |
+| OneDrive 備份（每 4 小時） | 已登入 OneDrive 的使用者，需 Docker、Node/npm 及 CMS 公鑰 |
+| `JOE-Desktop` 還原 | 屋企使用者登入後延遲執行，需 OneDrive 與 `CurrentUser\My` 私鑰；先還原再跑該機首次備份 |
+
+Wi‑Fi profile 保持 `PENDING_CONFIRM HKG_Airport_Public`，本次沒有更改 profile 或 PowerShell 核心腳本。工作排程器詳細設定見 [Wi‑Fi 與備份排程文件](docs/WIFI_AUTORECONNECT.md)。
 
 目前環境沒有 `.env`、Supabase CLI 或資料庫連線，因此 migration/RLS 測試尚未連線執行；JavaScript 語法檢查不代表資料庫權限已通過。
 

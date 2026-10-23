@@ -43,6 +43,12 @@ const users = {
     displayName: 'RLS Test Admin',
     role: 'admin',
   },
+  guest: {
+    id: '33333333-3333-4333-8333-333333333306',
+    email: 'rls.guest@family-calendar.test',
+    displayName: 'RLS Test Guest',
+    role: 'guest',
+  },
 };
 
 const memberIds = {
@@ -52,6 +58,7 @@ const memberIds = {
   disabled: '33333333-3333-4333-8333-333333333314',
   outsider: '44444444-4444-4444-8444-444444444411',
   admin: '33333333-3333-4333-8333-333333333315',
+  guest: '33333333-3333-4333-8333-333333333316',
 };
 
 const workerDiaryId = '55555555-5555-4555-8555-555555555510';
@@ -74,6 +81,7 @@ const requestIds = {
   privateApproval: '66666666-6666-4666-8666-666666666601',
   outsiderApproval: '66666666-6666-4666-8666-666666666602',
   experienceApproval: '66666666-6666-4666-8666-666666666603',
+  guestRequest: '66666666-6666-4666-8666-666666666604',
 };
 
 let assertionCount = 0;
@@ -362,7 +370,11 @@ async function prepareFixtures(service) {
     await service
       .from('schedule_change_requests')
       .delete()
-      .in('id', [workerChangeRequestId, successfulChangeRequestId]),
+      .in('id', [
+        workerChangeRequestId,
+        successfulChangeRequestId,
+        requestIds.guestRequest,
+      ]),
     'Resetting fictional worker request fixture',
   );
 
@@ -385,11 +397,18 @@ async function prepareFixtures(service) {
 
   unwrap(
     await service.from('record_audience').upsert(
-      {
-        record_id: recordIds.grantedPlan,
-        member_id: memberIds.worker,
-        granted_by: accounts.master.id,
-      },
+      [
+        {
+          record_id: recordIds.grantedPlan,
+          member_id: memberIds.worker,
+          granted_by: accounts.master.id,
+        },
+        {
+          record_id: recordIds.grantedPlan,
+          member_id: memberIds.guest,
+          granted_by: accounts.master.id,
+        },
+      ],
       { onConflict: 'record_id,member_id' },
     ),
     'Granting access to the fictional shared plan',
@@ -447,6 +466,7 @@ async function runTests(service, accounts, versionById) {
   const master = await authenticateAccount(accounts.master);
   const spouse = await authenticateAccount(accounts.spouse);
   const worker = await authenticateAccount(accounts.worker);
+  const guest = await authenticateAccount(accounts.guest);
   const disabled = await authenticateAccount(accounts.disabled);
   const outsider = await authenticateAccount(accounts.outsider);
   const admin = await authenticateAccount(accounts.admin);
@@ -818,6 +838,95 @@ async function runTests(service, accounts, versionById) {
   const registration = await createRegistrationFixture(service, master, admin);
   assert(registration, 'Test 13 failed: pending registration flow was rejected.');
   assertionCount += 1;
+
+  const oversizedObjectPath =
+    `${FAMILY_ID}/${recordIds.ungrantedPlan}/rls-test-over-10-mib.bin`;
+  const oversizedUpload = await master.storage
+    .from('family-attachments')
+    .upload(
+      oversizedObjectPath,
+      Buffer.alloc(10 * 1024 * 1024 + 1, 0x5a),
+      {
+        contentType: 'application/octet-stream',
+        upsert: false,
+      },
+    );
+  if (!oversizedUpload.error) {
+    unwrap(
+      await master.storage
+        .from('family-attachments')
+        .remove([oversizedObjectPath]),
+      'Removing an unexpectedly accepted oversized test object',
+    );
+  }
+  assert(
+    Boolean(oversizedUpload.error),
+    'Test 14 failed: the family-attachments bucket accepted a file larger than 10 MiB.',
+  );
+  assertionCount += 1;
+
+  const guestRead = await guest
+    .from('records')
+    .select('id')
+    .eq('id', recordIds.grantedPlan);
+  const guestReadablePlanVersion = unwrap(
+    await service
+      .from('records')
+      .select('row_version')
+      .eq('id', recordIds.grantedPlan)
+      .single(),
+    'Reading the guest-readable plan version',
+  ).row_version;
+  const guestInsert = await guest.from('records').insert({
+    family_id: FAMILY_ID,
+    record_kind: 'experience',
+    record_type: 'diary',
+    title: 'Guest write must fail',
+    event_start: '2030-02-02T12:00:00.000Z',
+    created_by: accounts.guest.id,
+  });
+  const guestUpdate = await guest
+    .from('records')
+    .update({ title: 'Guest update must fail' })
+    .eq('id', recordIds.grantedPlan)
+    .select('id');
+  const guestDelete = await guest
+    .from('records')
+    .delete()
+    .eq('id', recordIds.grantedPlan)
+    .select('id');
+  const guestChangeRequest = await guest
+    .from('schedule_change_requests')
+    .insert({
+      id: requestIds.guestRequest,
+      family_id: FAMILY_ID,
+      record_id: recordIds.grantedPlan,
+      record_version: guestReadablePlanVersion,
+      requested_changes: { title: 'Guest request must fail' },
+      requested_by: accounts.guest.id,
+    })
+    .select('id');
+  const guestRequestWasAccepted =
+    !guestChangeRequest.error && Boolean(guestChangeRequest.data?.length);
+  if (guestRequestWasAccepted) {
+    unwrap(
+      await service
+        .from('schedule_change_requests')
+        .delete()
+        .eq('id', requestIds.guestRequest),
+      'Cleaning up the unexpectedly accepted guest request',
+    );
+  }
+  assert(
+    !guestRead.error
+      && guestRead.data.length === 1
+      && Boolean(guestInsert.error)
+      && (Boolean(guestUpdate.error) || guestUpdate.data.length === 0)
+      && (Boolean(guestDelete.error) || guestDelete.data.length === 0)
+      && !guestRequestWasAccepted,
+    'Test 15 failed: guest access was not read-only or a guest schedule request was accepted.',
+  );
+  assertionCount += 1;
 }
 
 async function createRegistrationFixture(service, authenticatedMaster, authenticatedAdmin) {
@@ -921,11 +1030,11 @@ async function main() {
   const { accounts, versionById } = await prepareFixtures(service);
   await runTests(service, accounts, versionById);
 
-  if (assertionCount !== 13) {
-    throw new Error(`Expected 13 security tests, ran ${assertionCount}.`);
+  if (assertionCount !== 15) {
+    throw new Error(`Expected 15 security tests, ran ${assertionCount}.`);
   }
 
-  console.log('All 13 DB_DESIGN.md RLS security tests passed.');
+  console.log('All 15 DB_DESIGN.md RLS security tests passed.');
 }
 
 main().catch((error) => {

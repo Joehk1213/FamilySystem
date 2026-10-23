@@ -1,0 +1,87 @@
+name: MVP CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-supabase-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start local Supabase
+        run: |
+          if ! npx --yes supabase start > "$RUNNER_TEMP/supabase-start.log" 2>&1; then
+            echo "::error::Local Supabase failed to start. CLI output was withheld to avoid printing local credentials."
+            exit 1
+          fi
+
+      - name: Configure local-only test environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          env_file="$RUNNER_TEMP/supabase-local.env"
+          npx --yes supabase status -o env > "$env_file"
+
+          supabase_url=""
+          anon_key=""
+          service_role_key=""
+          while IFS='=' read -r name value; do
+            value="${value#\"}"
+            value="${value%\"}"
+            case "$name" in
+              API_URL) supabase_url="$value" ;;
+              ANON_KEY) anon_key="$value" ;;
+              SERVICE_ROLE_KEY) service_role_key="$value" ;;
+            esac
+          done < "$env_file"
+          rm -f "$env_file"
+
+          case "$supabase_url" in
+            http://127.0.0.1:*|http://localhost:*) ;;
+            *)
+              echo "::error::Refusing to run tests against a non-local Supabase URL."
+              exit 1
+              ;;
+          esac
+          test -n "$anon_key"
+          test -n "$service_role_key"
+
+          {
+            echo "SUPABASE_URL=$supabase_url"
+            echo "SUPABASE_ANON_KEY=$anon_key"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$service_role_key"
+            echo "SEED_TEST_USER_PASSWORD=MvpLocal-Demo-2026!"
+            echo "RLS_TEST_PASSWORD=MvpLocal-Demo-2026!"
+            echo "RLS_TEST_PROJECT_CONFIRM=I_AM_USING_A_DISPOSABLE_TEST_PROJECT"
+          } >> "$GITHUB_ENV"
+
+      - name: Seed fictional local accounts
+        run: npm run seed
+
+      - name: Run RLS tests
+        run: node scripts/test-rls.js
+
+      - name: Run schedule approval tests
+        run: node scripts/test-approve.js
+
+      - name: Stop local Supabase
+        if: always()
+        run: npx --yes supabase stop > "$RUNNER_TEMP/supabase-stop.log" 2>&1 || true
