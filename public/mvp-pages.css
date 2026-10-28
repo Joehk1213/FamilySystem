@@ -359,6 +359,25 @@
   font-size: 0.82rem;
 }
 
+.family-overview-reminder-details {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.today-citation {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
 .family-overview-memory-list li {
   display: grid;
 }

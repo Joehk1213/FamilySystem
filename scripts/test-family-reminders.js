@@ -49,7 +49,7 @@ async function run() {
   });
   const appUrl = process.env.FAMILY_APP_URL
     || `http://127.0.0.1:${process.env.PORT || 3000}`;
-  let reminderId;
+  const reminderIds = [];
   let checks = 0;
 
   try {
@@ -77,18 +77,37 @@ async function run() {
     }
     checks += 1;
 
-    const saved = await request(appUrl, token, '/api/reminders/save', 'POST', {
-      title: 'Fictional reminder integration test',
+    const savedLate = await request(appUrl, token, '/api/reminders/save', 'POST', {
+      title: 'Fictional reminder integration test late',
       dueAt: '2030-05-01T09:00:00.000Z',
     });
-    if (saved.response.status !== 201 || !saved.result.success || !saved.result.data.id) {
-      throw new Error(saved.result.message || 'The active member could not save a reminder.');
+    if (savedLate.response.status !== 201 || !savedLate.result.success || !savedLate.result.data.id) {
+      throw new Error(savedLate.result.message || 'The active member could not save a reminder.');
     }
-    reminderId = saved.result.data.id;
+    const lateReminderId = savedLate.result.data.id;
+    reminderIds.push(lateReminderId);
+    const savedEarly = await request(appUrl, token, '/api/reminders/save', 'POST', {
+      title: 'Fictional reminder integration test early',
+      dueAt: '2029-05-01T09:00:00.000Z',
+    });
+    if (savedEarly.response.status !== 201 || !savedEarly.result.success || !savedEarly.result.data.id) {
+      throw new Error(savedEarly.result.message || 'The active member could not save an earlier reminder.');
+    }
+    const earlyReminderId = savedEarly.result.data.id;
+    reminderIds.push(earlyReminderId);
+    const ordered = await request(appUrl, token, '/api/reminders/list');
+    if (!ordered.response.ok || !ordered.result.success || !Array.isArray(ordered.result.data)) {
+      throw new Error(ordered.result.message || 'The active member could not reload reminders.');
+    }
+    const earlyIndex = ordered.result.data.findIndex((reminder) => reminder.id === earlyReminderId);
+    const lateIndex = ordered.result.data.findIndex((reminder) => reminder.id === lateReminderId);
+    if (earlyIndex < 0 || earlyIndex >= lateIndex) {
+      throw new Error('Reminders were not listed in ascending due-date order.');
+    }
     checks += 1;
 
     const toggled = await request(appUrl, token, '/api/reminders/toggle', 'POST', {
-      id: reminderId,
+      id: earlyReminderId,
       isDone: true,
     });
     if (!toggled.response.ok || !toggled.result.success || !toggled.result.data.is_done) {
@@ -98,17 +117,18 @@ async function run() {
 
     const verified = await request(appUrl, token, '/api/reminders/list');
     if (!verified.response.ok || !verified.result.success
-      || !verified.result.data.some((reminder) => reminder.id === reminderId && reminder.is_done)) {
+      || !verified.result.data.some((reminder) => reminder.id === earlyReminderId && reminder.is_done)
+      || !verified.result.data.some((reminder) => reminder.id === lateReminderId && !reminder.is_done)) {
       throw new Error('The reminder list did not reflect the updated completion state.');
     }
     checks += 1;
-    console.log(`Family reminders integration: ${checks}/5 checks passed (active membership, validation, list/save/toggle).`);
+    console.log(`Family reminders integration: ${checks}/5 checks passed (active membership, validation, due-date order, list/save/toggle).`);
   } finally {
-    if (reminderId) {
+    if (reminderIds.length) {
       const { error: deleteError } = await adminClient
         .from('reminders')
         .delete()
-        .eq('id', reminderId);
+        .in('id', reminderIds);
       if (deleteError) {
         throw deleteError;
       }

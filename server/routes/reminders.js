@@ -45,9 +45,9 @@ function sendSupabaseError(res, error, action) {
 async function getActiveMembership(req) {
   const { data, error } = await req.supabase
     .from('family_members')
-    .select('family_id, role, is_active')
+    .select('family_id, role, status')
     .eq('profile_id', req.user.id)
-    .eq('is_active', true)
+    .eq('status', 'active')
     .not('role', 'is', null)
     .maybeSingle();
 

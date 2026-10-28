@@ -433,10 +433,13 @@ function overviewText(key) {
       description: '只顯示登入帳戶按 RLS 可讀取的行程、提醒及家庭記憶。',
       events: '未來 7 日行程',
       noEvents: '未來 7 日沒有可查看的行程。',
-      reminders: '未完成提醒',
-      noReminders: '未來 7 日沒有未完成提醒。',
+      reminders: '管家提醒',
+      noReminders: '目前沒有未完成提醒。',
       reminderTitle: '提醒事項',
       dueAt: '到期時間',
+      noDueDate: '未設定到期時間',
+      dueIn: '剩餘',
+      overdue: '已逾期',
       sourceMemory: '關聯 MEMORY（可選）',
       noMemory: '不關聯記憶',
       saveReminder: '儲存提醒',
@@ -448,6 +451,8 @@ function overviewText(key) {
       memories: '最近 5 條 MEMORY',
       noMemories: '目前沒有家庭記憶。',
       memorySource: '來源',
+      citation: '引用',
+      distance: '距離',
       created: '建立時間',
     },
     en: {
@@ -455,10 +460,13 @@ function overviewText(key) {
       description: 'Only events, reminders, and memories readable by your signed-in account under RLS are shown.',
       events: 'Events in the Next 7 Days',
       noEvents: 'No readable events in the next 7 days.',
-      reminders: 'Open Reminders',
-      noReminders: 'No open reminders due in the next 7 days.',
+      reminders: 'Housekeeper Reminders',
+      noReminders: 'There are no open reminders.',
       reminderTitle: 'Reminder',
       dueAt: 'Due date and time',
+      noDueDate: 'No due date set',
+      dueIn: 'Due in',
+      overdue: 'Overdue',
       sourceMemory: 'Link MEMORY (optional)',
       noMemory: 'No linked memory',
       saveReminder: 'Save reminder',
@@ -470,10 +478,38 @@ function overviewText(key) {
       memories: '5 Most Recent MEMORY Items',
       noMemories: 'No family memories have been added.',
       memorySource: 'Source',
+      citation: 'Citation',
+      distance: 'Distance',
       created: 'Created',
     },
   };
   return text[language][key];
+}
+
+function formatRemainingTime(value) {
+  const difference = Date.parse(value) - Date.now();
+  if (!Number.isFinite(difference)) {
+    return overviewText('noDueDate');
+  }
+
+  const totalMinutes = Math.max(1, Math.ceil(Math.abs(difference) / 60000));
+  let amount;
+  let unit;
+  if (totalMinutes < 60) {
+    amount = totalMinutes;
+    unit = language === 'en' ? (amount === 1 ? 'minute' : 'minutes') : '分鐘';
+  } else if (totalMinutes < 1440) {
+    amount = Math.ceil(totalMinutes / 60);
+    unit = language === 'en' ? (amount === 1 ? 'hour' : 'hours') : '小時';
+  } else {
+    amount = Math.ceil(totalMinutes / 1440);
+    unit = language === 'en' ? (amount === 1 ? 'day' : 'days') : '日';
+  }
+
+  const duration = `${amount} ${unit}`;
+  return difference < 0
+    ? `${overviewText('overdue')} ${duration}`
+    : `${overviewText('dueIn')} ${duration}`;
 }
 
 function renderOverviewError(container, error) {
@@ -503,46 +539,61 @@ async function loadFamilyOverview() {
         .lt('event_start', end)
         .order('event_start', { ascending: true }),
       authenticatedApiRequest('/api/reminders/list', 'GET'),
-      authenticatedApiRequest('/api/memories', 'GET'),
+      authenticatedApiRequest('/api/memories/list', 'GET'),
     ]);
     if (eventsResult.error) {
       throw eventsResult.error;
     }
 
-    const dueReminders = reminders
-      .filter((reminder) => (
-        !reminder.is_done
-        && reminder.due_at
-        && reminder.due_at >= start
-        && reminder.due_at < end
-      ))
-      .sort((left, right) => left.due_at.localeCompare(right.due_at));
+    const openReminders = reminders
+      .filter((reminder) => !reminder.is_done)
+      .sort((left, right) => {
+        const leftDueAt = left.due_at ? Date.parse(left.due_at) : Number.POSITIVE_INFINITY;
+        const rightDueAt = right.due_at ? Date.parse(right.due_at) : Number.POSITIVE_INFINITY;
+        return leftDueAt - rightDueAt;
+      });
     const recentMemories = memories.slice(0, 5);
+    const memoriesById = new Map(memories.map((memory) => [memory.id, memory]));
     eventsBox.innerHTML = eventsResult.data.length
       ? `<ul class="family-overview-list">${eventsResult.data.map((record) => `
           <li><span>${escapeHtml(record.title || t('visibleRecord'))}</span>
             <time datetime="${escapeHtml(record.event_start)}">${escapeHtml(formatDate(record.event_start))}</time></li>
         `).join('')}</ul>`
       : `<p class="mvp-empty">${overviewText('noEvents')}</p>`;
-    remindersBox.innerHTML = dueReminders.length
-      ? `<ul class="family-overview-list">${dueReminders.map((reminder) => `
+    remindersBox.innerHTML = openReminders.length
+      ? `<ul class="family-overview-list">${openReminders.map((reminder) => {
+        const sourceMemory = memoriesById.get(reminder.source_memory_id);
+        const sourceName = sourceMemory
+          ? sourceMemory.source_file_name || sourceMemory.source_file
+          : null;
+        const dueDetails = reminder.due_at
+          ? `${escapeHtml(formatDate(reminder.due_at))} · ${escapeHtml(formatRemainingTime(reminder.due_at))}`
+          : overviewText('noDueDate');
+        const citation = sourceName
+          ? `<span class="today-citation" data-today-citation>[${overviewText('citation')}: ${escapeHtml(sourceName)}]</span>`
+          : '';
+        return `
           <li data-reminder-id="${escapeHtml(reminder.id)}">
-            <span>${escapeHtml(reminder.title)}
-              <small>${escapeHtml(formatDate(reminder.due_at))}</small>
+            <span class="family-overview-reminder-details">${escapeHtml(reminder.title)}
+              <small>${dueDetails}</small>
+              ${citation}
             </span>
             <button class="mvp-button mvp-button-secondary" type="button"
               data-toggle-reminder="${escapeHtml(reminder.id)}" data-next-done="true">
               ${overviewText('markDone')}
             </button>
           </li>
-        `).join('')}</ul>`
+        `;
+      }).join('')}</ul>`
       : `<p class="mvp-empty">${overviewText('noReminders')}</p>`;
     memoriesBox.innerHTML = recentMemories.length
       ? `<ul class="family-overview-list family-overview-memory-list">${recentMemories.map((memory) => `
           <li>
             <span class="family-overview-memory-content">${escapeHtml(memory.content.slice(0, 180))}</span>
-            <small>${overviewText('memorySource')}: ${escapeHtml(memory.source_file_name || overviewText('memories'))}
-              · ${overviewText('created')}: ${escapeHtml(formatDate(memory.created_at))}</small>
+            <span class="today-citation" data-today-citation>[${overviewText('citation')}: ${escapeHtml(memory.source_file_name || memory.source_file || overviewText('memories'))}]</span>
+            <small>${overviewText('memorySource')}: ${escapeHtml(memory.source_file_name || memory.source_file || overviewText('memories'))}
+              · ${overviewText('created')}: ${escapeHtml(formatDate(memory.created_at || memory.metadata?.created_at))}
+              ${Number.isFinite(memory.distance) ? ` · ${overviewText('distance')}: ${Number(memory.distance).toFixed(3)}` : ''}</small>
           </li>
         `).join('')}</ul>`
       : `<p class="mvp-empty">${overviewText('noMemories')}</p>`;
@@ -628,8 +679,8 @@ function memoryText(key) {
       historyLoading: '正在載入記憶…',
       input: '輸入問題或要保存的文字',
       placeholder: '例如：測試家庭的虛構活動安排',
-      file: '拖放或選取文字檔',
-      fileHint: '只支援 .txt、.md；每個檔案最多 64 KB。',
+      file: '拖放或選取文字／PDF 檔',
+      fileHint: '支援 .txt、.md（最多 64 KB）及 PDF（最多 5 MB）；PDF 只擷取內嵌文字，不做 OCR。',
       search: '搜尋記憶',
       save: '保存為家庭記憶',
       searching: '正在搜尋…',
@@ -640,9 +691,11 @@ function memoryText(key) {
       saved: '家庭記憶已保存。',
       searched: '搜尋完成。',
       fileLoaded: '文字檔已在本機讀取。',
-      fileIngested: '文字檔記憶已完成匯入。',
-      fileTypeError: '只可加入 .txt 或 .md 文字檔。',
+      fileIngested: '檔案記憶已完成匯入。',
+      fileTypeError: '只可加入 .txt、.md 或 PDF 檔；PDF 只擷取內嵌文字，不做 OCR。',
       fileSizeError: '檔案不可大於 64 KB。',
+      pdfSizeError: 'PDF 檔不可大於 5 MB。',
+      pdfNoText: 'PDF 沒有可擷取的內嵌文字；不支援 OCR，原檔不會上傳。',
       fileReadError: '無法在本機讀取此檔案。',
       fileEmptyError: '檔案沒有可匯入的文字。',
       emptyError: '請輸入文字或選擇文字檔。',
@@ -669,8 +722,8 @@ function memoryText(key) {
       historyLoading: 'Loading memories…',
       input: 'Enter a question or text to save',
       placeholder: 'For example: a fictional activity plan for the test family',
-      file: 'Drop or choose a text file',
-      fileHint: 'Supported: .txt and .md; maximum 64 KB per file.',
+      file: 'Drop or choose a text or PDF file',
+      fileHint: 'Supported: .txt and .md (up to 64 KB), and PDF (up to 5 MB). PDFs are text-extracted locally without OCR.',
       search: 'Search memories',
       save: 'Save as family memory',
       searching: 'Searching…',
@@ -681,9 +734,11 @@ function memoryText(key) {
       saved: 'Family memory saved.',
       searched: 'Search complete.',
       fileLoaded: 'Text file read locally.',
-      fileIngested: 'Text file memories have been ingested.',
-      fileTypeError: 'Only .txt or .md text files are supported.',
+      fileIngested: 'File memories have been ingested.',
+      fileTypeError: 'Only .txt, .md, and PDF files are supported. PDFs are text-extracted locally without OCR.',
       fileSizeError: 'The file must be 64 KB or smaller.',
+      pdfSizeError: 'The PDF must be 5 MB or smaller.',
+      pdfNoText: 'No embedded text was found in the PDF. OCR is not supported, and the original file is not uploaded.',
       fileReadError: 'Could not read this file locally.',
       fileEmptyError: 'The file has no text to ingest.',
       emptyError: 'Enter text or choose a text file.',
@@ -738,7 +793,7 @@ function renderFamilyChatPage() {
               placeholder="${memoryText('placeholder')}"></textarea>
           </label>
           <label class="family-chat-drop" data-memory-drop>
-            <input type="file" data-memory-file accept=".txt,.md,text/plain,text/markdown">
+            <input type="file" data-memory-file accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf">
             <span class="family-chat-drop-title">${memoryText('file')}</span>
             <span class="family-chat-drop-hint" data-file-hint>${memoryText('fileHint')}</span>
           </label>
@@ -848,6 +903,46 @@ async function loadMemoryHistory() {
     });
   } catch (error) {
     history.innerHTML = `<p class="mvp-alert" role="alert">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+async function extractPdfTextLocally(file) {
+  const pdfjs = await import('/vendor/pdfjs/pdf.mjs');
+  pdfjs.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.mjs';
+  const loadingTask = pdfjs.getDocument({
+    data: new Uint8Array(await file.arrayBuffer()),
+    cMapUrl: '/vendor/pdfjs/cmaps/',
+    cMapPacked: true,
+    standardFontDataUrl: '/vendor/pdfjs/standard_fonts/',
+    wasmUrl: '/vendor/pdfjs/wasm/',
+    isEvalSupported: false,
+  });
+  try {
+    const document = await loadingTask.promise;
+    const pages = [];
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+      const page = await document.getPage(pageNumber);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item) => {
+          if (typeof item.str !== 'string') {
+            return '';
+          }
+          return `${item.str}${item.hasEOL ? '\n' : ' '}`;
+        })
+        .join('')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .join('\n');
+      if (pageText) {
+        pages.push(pageText);
+      }
+      page.cleanup();
+    }
+    return pages.join('\n');
+  } finally {
+    await loadingTask.destroy();
   }
 }
 
@@ -968,12 +1063,14 @@ async function loadMemoryFile(file) {
   }
 
   const extension = file.name.split('.').pop().toLowerCase();
-  if (!['txt', 'md'].includes(extension)) {
+  const isPdf = extension === 'pdf';
+  if (!['txt', 'md', 'pdf'].includes(extension)) {
     showMemoryMessage(memoryText('fileTypeError'), true);
     return;
   }
-  if (file.size > 64 * 1024) {
-    showMemoryMessage(memoryText('fileSizeError'), true);
+  const maximumSize = isPdf ? 5 * 1024 * 1024 : 64 * 1024;
+  if (file.size > maximumSize) {
+    showMemoryMessage(memoryText(isPdf ? 'pdfSizeError' : 'fileSizeError'), true);
     return;
   }
 
@@ -985,9 +1082,12 @@ async function loadMemoryFile(file) {
   fileInput.disabled = true;
 
   try {
-    const content = await file.text();
-    fileHint.textContent = `${file.name} · ${memoryText('fileLoaded')}`;
-    showMemoryMessage(memoryText('fileLoaded'));
+    const extractedContent = isPdf
+      ? await extractPdfTextLocally(file)
+      : await file.text();
+    const content = isPdf
+      ? extractedContent.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).join('\n')
+      : extractedContent;
     const characters = Array.from(content);
     for (let start = 0; start < characters.length; start += 800) {
       const chunk = characters.slice(start, start + 1000).join('').trim();
@@ -999,9 +1099,17 @@ async function loadMemoryFile(file) {
       }
     }
     if (!chunks.length) {
-      showMemoryMessage(memoryText('fileEmptyError'), true);
+      showMemoryMessage(memoryText(isPdf ? 'pdfNoText' : 'fileEmptyError'), true);
       return;
     }
+
+    const localReadMessage = isPdf
+      ? language === 'en'
+        ? `PDF read locally: ${chunks.length} chunks.`
+        : `PDF已在本機讀取 ${chunks.length} 段。`
+      : memoryText('fileLoaded');
+    fileHint.textContent = `${file.name} · ${localReadMessage}`;
+    showMemoryMessage(localReadMessage);
 
     for (let index = 0; index < chunks.length; index += 1) {
       const result = await authenticatedApiRequest('/api/memories/ingest', 'POST', {

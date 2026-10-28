@@ -55,9 +55,9 @@ JOE-SERVER 自託管 Supabase（Postgres、Auth、Storage、PostgREST）設定�
 
 ## 已批准擴展：Family Memory 原型
 
-登入後可由 `/chat` 開啟家庭記憶介面；文字及 `.txt`／`.md`／`.csv`／`.json` 內容只會送到本機 Family Calendar API 和目前設定的 Supabase，不會呼叫 OpenRouter 或其他 AI 服務。檔案在瀏覽器本機讀取，單檔最多 64 KB、文字最多 12,000 字元。日曆記錄及私人日記不會自動匯入；日曆和未來 7 日行程仍在 `/today`。
+登入後可由 `/chat` 開啟家庭記憶介面；文字、`.txt`／`.md` 及 PDF 只會送到本機 Family Calendar API 和目前設定的 Supabase，不會呼叫 OpenRouter 或其他 AI 服務。檔案在瀏覽器本機讀取，`.txt`／`.md` 上限為 64 KB，PDF 上限為 5 MB；本機 vendored PDF.js 只擷取 PDF 內嵌文字，不做 OCR，原始檔不會上載至 Storage。非空文字按每段 1,000 字元、重疊 200 字元分段後寫入。日曆記錄及私人日記不會自動匯入；日曆、未來 7 日行程及管家提醒仍在 `/today`。
 
-Migrations `20261028000001_family_memories.sql` 至 `20261028000003_family_memory_metrics.sql` 建立 pgvector `family_memories`、家庭提醒及 cosine/L2/inner-product 搜尋；`20261028000002_reminders.sql` 使用既有 active-family RLS helper，並拒絕跨家庭 MEMORY 關聯。`/today` 顯示未來 7 日可讀行程、未完成提醒及最近 5 條 MEMORY。Embedding 會嘗試由本機 `FAMILY_RAG_MODEL_PATH`（未設定時按 `FAMILY_DATA_ROOT` 推導，C: 預設 `C:\docker-data\family-rag\models`，JOE-SERVER D: 為 `D:\docker-data\family-rag\models`）載入 bge-small-zh-v1.5；不會連外下載模型或呼叫 AI API。模型缺失、載入失敗或輸出維度不符時，會記錄 `using placeholder` 並回退至 384 維 normalized feature-hash；不得聲稱已載入權重。資料只有 RLS 隔離、沒有端對端或資料庫加密；只准用虛構 `@family-calendar.test` 資料。
+Migrations `20261028000001_family_memories.sql` 至 `20261028000003_family_memory_metrics.sql` 建立 pgvector `family_memories`、家庭提醒及 cosine/L2/inner-product 搜尋；`20261028000002_reminders.sql` 使用既有 active-family RLS helper，並拒絕跨家庭 MEMORY 關聯。`/today` 顯示未來 7 日可讀行程、按到期時間排序的未完成管家提醒（含剩餘時間及可用的來源引用），以及最近 5 條 MEMORY（含來源、建立時間；只有實際搜尋結果才有距離）。Embedding 會嘗試由本機 `FAMILY_RAG_MODEL_PATH`（未設定時按 `FAMILY_DATA_ROOT` 推導，C: 預設 `C:\docker-data\family-rag\models`，JOE-SERVER D: 為 `D:\docker-data\family-rag\models`）載入 bge-small-zh-v1.5；不會連外下載模型或呼叫 AI API。模型缺失、載入失敗或輸出維度不符時，會記錄 `using placeholder` 並回退至 384 維 normalized feature-hash；提醒 scheduler 每 15 分鐘只記錄本機 log，不發送外網通知。不得聲稱已載入權重。資料只有 RLS 隔離、沒有端對端或資料庫加密；只准用虛構 `@family-calendar.test` 資料。
 
 在本機 disposable stack 啟動應用後，可用 `$env:DOTENV_CONFIG_PATH='.env.docker'; npm run test:family-memories` 驗證 authenticated API、同家庭 Worker、pending 隔離及搜尋；測試只建立並清除虛構 fixture。Gateway 的 `CORS_ALLOWED_ORIGIN` 必須設定成唯一的瀏覽器前端 origin，不可設成 `*`。
 

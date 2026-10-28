@@ -197,6 +197,21 @@ async function run() {
     }
     checks += 1;
 
+    const listResponse = await fetch(`${appUrl}/api/memories/list`, {
+      headers: { Authorization: authorization },
+    });
+    const listResult = await listResponse.json();
+    const listedFixture = listResult.data?.find((memory) => memory.id === inserted.id);
+    if (!listResponse.ok || !listResult.success
+      || !listedFixture
+      || listedFixture.source_file_name !== 'fictional-test.txt'
+      || !listedFixture.created_at
+      || listedFixture.distance !== null
+      || listedFixture.metadata?.created_at !== listedFixture.created_at) {
+      throw new Error(listResult.message || 'The memory list did not return citation metadata.');
+    }
+    checks += 1;
+
     const workerSignIn = await workerClient.auth.signInWithPassword({
       email: 'test.helper@family-calendar.test',
       password,
@@ -276,7 +291,7 @@ async function run() {
     }
     checks += 1;
 
-    console.log(`Family memories integration: ${checks}/9 checks passed (active membership, normalized embeddings, ${MAX_BATCH_SIZE}-text batch and ${MAX_TEXT_LENGTH}-character boundaries, three-chunk authenticated ingestion, same-family access, cosine citations, unrelated-query filtering).`);
+    console.log(`Family memories integration: ${checks}/10 checks passed (active membership, normalized embeddings, ${MAX_BATCH_SIZE}-text batch and ${MAX_TEXT_LENGTH}-character boundaries, three-chunk authenticated ingestion, list citation metadata, same-family access, cosine citations, unrelated-query filtering).`);
   } finally {
     for (const memoryId of memoryIds) {
       const { error: deleteError } = await adminClient

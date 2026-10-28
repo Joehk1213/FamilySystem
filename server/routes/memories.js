@@ -86,30 +86,39 @@ function parseIngestChunks(value) {
   return { chunks };
 }
 
-router.get(['/api/memories', '/api/memories/history'], requireSupabaseUser, async (req, res) => {
-  try {
-    const { data, error } = await req.supabase
-      .from(getFamilyMemoriesTable())
-      .select('id, content, source_file, created_by, created_at')
-      .order('created_at', { ascending: false })
-      .limit(50);
+router.get(
+  ['/api/memories', '/api/memories/history', '/api/memories/list'],
+  requireSupabaseUser,
+  async (req, res) => {
+    try {
+      const { data, error } = await req.supabase
+        .from(getFamilyMemoriesTable())
+        .select('id, content, source_file, source_file_name, created_by, created_at')
+        .order('created_at', { ascending: false })
+        .limit(50);
 
-    if (error) {
-      return sendSupabaseError(res, error, 'Could not load family memory history:');
+      if (error) {
+        return sendSupabaseError(res, error, 'Could not load family memory history:');
+      }
+      if (!Array.isArray(data)) {
+        return apiFailure(res, 502, 'The family memory service returned an invalid history response.');
+      }
+      const memories = data.map((memory) => ({
+        ...memory,
+        source_file_name: memory.source_file_name || memory.source_file || null,
+        distance: null,
+        metadata: {
+          created_by: memory.created_by,
+          created_at: memory.created_at,
+        },
+      }));
+      return apiSuccess(res, 200, memories, 'Family memory history loaded.');
+    } catch (error) {
+      console.error('Family memory history request failed:', error);
+      return apiFailure(res, 500, 'Could not load family memory history.');
     }
-    if (!Array.isArray(data)) {
-      return apiFailure(res, 502, 'The family memory service returned an invalid history response.');
-    }
-    const memories = data.map((memory) => ({
-      ...memory,
-      source_file_name: memory.source_file_name || memory.source_file || null,
-    }));
-    return apiSuccess(res, 200, memories, 'Family memory history loaded.');
-  } catch (error) {
-    console.error('Family memory history request failed:', error);
-    return apiFailure(res, 500, 'Could not load family memory history.');
-  }
-});
+  },
+);
 
 router.post('/api/memories/ingest', requireSupabaseUser, async (req, res) => {
   try {
