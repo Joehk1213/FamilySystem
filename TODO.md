@@ -17,7 +17,7 @@
   - [x] family-pdf-local-and-today-citations：用本機 vendored PDF.js 擷取 PDF 內嵌文字（不做 OCR、不上載原檔），沿用 1,000/200 分段；`/today` 顯示近期記憶來源及日期、管家提醒排序/剩餘時間/來源引用與完成切換。
   - [x] family-bge-real-try：只在本機模型目錄含 `config.json` 時載入 Transformers.js，使用 `local_files_only` 並停用遠端模型；缺少目錄／設定、載入或推論失敗時明確記錄 placeholder。當前 C: 環境無模型，真實 BGE 尚未驗證。
   - [ ] 待提供並驗證相容的本機 bge-small-zh-v1.5 權重；目前只有 placeholder 可用，搜尋結果只供虛構測試資料原型使用
-  - [ ] family-memory-encryption：`records.encrypted_content` BYTEA 預留欄位及 pgcrypto extension 已加入 migration；欄位本身不會加密資料，應用層加解密、儲存、解鎖、搜尋及金鑰管理仍待設計和驗證。完成前不得將私人記憶描述為已加密，也不得輸入真實家庭或敏感個人資料。
+  - [ ] family-memory-encryption（已落實私人 record body）：pgcrypto 使用 `FAMILY_ENCRYPTION_KEY`（32-byte base64 高熵 key，僅存 `.env.docker`）加密 `visibility='private'` 記錄的 `content`；authenticated plaintext 寫入由 DB trigger 拒絕，API 經原用戶 JWT/RLS 讀取後才解密。標題及其他 metadata 仍是明文；尚無 key rotation、使用者解鎖或加密 family-memory/RAG 搜尋。key 遺失會令資料無法解密；部署前必須安全備份 key。已驗證虛構資料 round-trip，真實資料仍禁止使用。
 - [x] Task 2.4: 【用戶已批准非 MVP 擴展】加入本機多代理記憶查詢流程：安全檢查及 `security_logs`、同家庭 RAG librarian、無外網 analyst、引用 editor 及 orchestrator；`/api/memories/search` 要求登入並回傳安全狀態、引用及 metadata；`/chat` 顯示安全 badge、回答及 MEMORY 引用。`source/DB_SCHEMA_DRAFT.sql` 未修改。
   - [x] family-4agent-loop: 按 Security → Librarian → Analyst → Editor 次序落地 Node 防幻覺流程；以 `family_members.profile_id/status='active'` 驗證同家庭權限，強制 cosine 門檻、引用檢查及安全事件記錄。
   - [x] Local disposable 驗證：RLS 15/15、approval 3/3、family memories 10/10、reminders 5/5、agents 3/3；未登入搜尋 401，injection log 寫入後已清理

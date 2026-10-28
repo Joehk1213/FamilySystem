@@ -1200,15 +1200,13 @@ async function loadTodayRecords() {
 
   try {
     const startOfToday = localMidnightUtc(family.timezone || 'Asia/Hong_Kong');
-    const { data, error } = await supabase
-      .from('records')
-      .select('id, family_id, record_kind, record_type, title, content, event_start, event_end, status, visibility, created_by, row_version')
-      .eq('family_id', membership.family_id)
-      .gte('event_start', startOfToday)
-      .order('event_start', { ascending: true });
-    if (error) {
-      throw error;
+    const records = await authenticatedApiRequest('/api/records', 'GET');
+    if (!Array.isArray(records)) {
+      throw new Error('The records service returned an invalid response.');
     }
+    const data = records
+      .filter((record) => new Date(record.event_start) >= new Date(startOfToday))
+      .sort((left, right) => new Date(left.event_start) - new Date(right.event_start));
 
     if (!data.length) {
       list.innerHTML = `<p class="mvp-empty">${t('emptyToday')}</p>`;
@@ -1430,22 +1428,13 @@ async function handleCreateRecord(event) {
   submitButton.textContent = t('creating');
   try {
     const recordType = String(formData.get('record_type'));
-    const { data: record, error } = await supabase
-      .from('records')
-      .insert({
-        family_id: membership.family_id,
-        record_kind: recordType === 'schedule' ? 'plan' : 'experience',
-        record_type: recordType,
-        title: String(formData.get('title')).trim(),
-        event_start: new Date(String(formData.get('event_start'))).toISOString(),
-        visibility: String(formData.get('visibility')),
-        created_by: currentUser.id,
-      })
-      .select('id')
-      .single();
-    if (error) {
-      throw new Error(errorMessage(t('createFailed'), error));
-    }
+    const record = await authenticatedApiRequest('/api/records', 'POST', {
+      record_kind: recordType === 'schedule' ? 'plan' : 'experience',
+      record_type: recordType,
+      title: String(formData.get('title')).trim(),
+      event_start: new Date(String(formData.get('event_start'))).toISOString(),
+      visibility: String(formData.get('visibility')),
+    });
 
     for (const file of files) {
       try {

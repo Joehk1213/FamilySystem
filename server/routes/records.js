@@ -1,13 +1,17 @@
 const crypto = require('crypto');
 const express = require('express');
 const requireSupabaseUser = require('../middleware/requireSupabaseUser');
+const {
+  decryptContent,
+  encryptContent,
+} = require('../../source/security/encryption');
 
 const router = express.Router();
 const ATTACHMENT_BUCKET = 'family-attachments';
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const RECORD_COLUMNS =
-  'id, family_id, record_kind, record_type, title, content, event_start, event_end, is_all_day, status, visibility, linked_plan_id, created_by, row_version, created_at, updated_at';
+  'id, family_id, record_kind, record_type, title, content, encrypted_content, event_start, event_end, is_all_day, status, visibility, linked_plan_id, created_by, row_version, created_at, updated_at';
 const ATTACHMENT_COLUMNS =
   'id, record_id, storage_bucket, storage_path, file_name, file_type, size_bytes, uploaded_by, created_at';
 const CREATE_FIELDS = new Set([
@@ -160,6 +164,77 @@ function normalizeTextFields(source, target, fields) {
     target[field] = parsed.value;
   }
   return null;
+}
+
+async function prepareRecordForStorage(supabase, record) {
+  const prepared = {
+    ...record,
+    encrypted_content: null,
+  };
+  if (record.visibility === 'private') {
+    prepared.encrypted_content = await encryptContent(supabase, record.content);
+    prepared.content = null;
+  }
+  return prepared;
+}
+
+async function presentRecord(supabase, record) {
+  const { encrypted_content: ciphertext, ...publicRecord } = record;
+  if (ciphertext === null || ciphertext === undefined) {
+    if (record.visibility === 'private' && record.content !== null) {
+      throw new Error('Unencrypted private record content cannot be returned.');
+    }
+    return publicRecord;
+  }
+  if (record.visibility !== 'private') {
+    throw new Error('Encrypted record content is attached to a non-private record.');
+  }
+
+  return {
+    ...publicRecord,
+    content: await decryptContent(supabase, ciphertext),
+  };
+}
+
+async function presentRecords(supabase, records) {
+  return Promise.all(records.map((record) => presentRecord(supabase, record)));
+}
+
+async function prepareRecordUpdate(supabase, existing, patch) {
+  const becomesPrivate = (patch.visibility ?? existing.visibility) === 'private';
+  const contentWasProvided = Object.hasOwn(patch, 'content');
+  const existingPlaintext = existing.encrypted_content
+    ? await decryptContent(supabase, existing.encrypted_content)
+    : existing.content;
+
+  if (becomesPrivate) {
+    if (
+      contentWasProvided
+      || existing.visibility !== 'private'
+      || (!existing.encrypted_content && existing.content !== null)
+    ) {
+      const plaintext = contentWasProvided
+        ? patch.content
+        : existingPlaintext;
+      patch.content = null;
+      patch.encrypted_content = await encryptContent(supabase, plaintext);
+    } else {
+      delete patch.content;
+    }
+    return patch;
+  }
+
+  if (contentWasProvided) {
+    patch.encrypted_content = null;
+  } else if (existing.encrypted_content) {
+    patch.content = existingPlaintext;
+    patch.encrypted_content = null;
+  } else if (existing.visibility === 'private') {
+    patch.content = existing.content;
+    patch.encrypted_content = null;
+  }
+
+  return patch;
 }
 
 function validateRecord(record) {
@@ -429,7 +504,8 @@ router.get('/api/records', async (req, res) => {
       attachmentsByRecordId.set(attachment.record_id, current);
     }
 
-    const data = records.map((record) => ({
+    const readableRecords = await presentRecords(req.supabase, records);
+    const data = readableRecords.map((record) => ({
       ...record,
       attachments: attachmentsByRecordId.get(record.id) || [],
     }));
@@ -513,15 +589,17 @@ router.post('/api/records/batch', async (req, res) => {
       memberIdByName.set(key, matches[0].id);
     }
 
-    const payload = validatedRecords.map(({ record, participantNames }) => ({
-      ...record,
-      family_id: membership.family_id,
-      created_by: req.user.id,
-      record_participants: participantNames.map((name) => ({
-        member_id: memberIdByName.get(name.toLocaleLowerCase('en')),
-        added_by: req.user.id,
-      })),
-    }));
+    const payload = await Promise.all(validatedRecords.map(
+      async ({ record, participantNames }) => ({
+        ...await prepareRecordForStorage(req.supabase, record),
+        family_id: membership.family_id,
+        created_by: req.user.id,
+        record_participants: participantNames.map((name) => ({
+          member_id: memberIdByName.get(name.toLocaleLowerCase('en')),
+          added_by: req.user.id,
+        })),
+      }),
+    ));
     const { data, error } = await req.supabase
       .from('records')
       .insert(payload)
@@ -536,7 +614,12 @@ router.post('/api/records/batch', async (req, res) => {
       });
       return apiFailure(res, 502, 'The schedule import could not be verified.');
     }
-    return apiSuccess(res, 201, data, 'Schedule records imported successfully.');
+    return apiSuccess(
+      res,
+      201,
+      await presentRecords(req.supabase, data),
+      'Schedule records imported successfully.',
+    );
   } catch (error) {
     console.error('Failed to import schedule records:', error);
     return apiFailure(res, 500, 'Could not import schedule records.');
@@ -576,9 +659,8 @@ router.post('/api/records', async (req, res) => {
       }
     }
 
-    // TODO: Private diary encryption is undecided; do not treat plaintext storage as an approved security design.
     const payload = {
-      ...validated.record,
+      ...await prepareRecordForStorage(req.supabase, validated.record),
       family_id: membership.family_id,
       created_by: req.user.id,
     };
@@ -612,7 +694,12 @@ router.post('/api/records', async (req, res) => {
       createdBy: data.created_by,
       createdByMatchesAuthenticatedUser: data.created_by === req.user.id,
     });
-    return apiSuccess(res, 201, data, 'Record created successfully.');
+    return apiSuccess(
+      res,
+      201,
+      await presentRecord(req.supabase, data),
+      'Record created successfully.',
+    );
   } catch (error) {
     console.error('Failed to create record:', error);
     return apiFailure(res, 500, 'Could not create the record.');
@@ -653,9 +740,14 @@ router.patch('/api/records/:recordId', async (req, res) => {
       }
     }
 
+    const updatePayload = await prepareRecordUpdate(
+      req.supabase,
+      existing,
+      validated.patch,
+    );
     const { data, error } = await req.supabase
       .from('records')
-      .update(validated.patch)
+      .update(updatePayload)
       .eq('id', existing.id)
       .eq('family_id', membership.family_id)
       .select(RECORD_COLUMNS)
@@ -667,7 +759,12 @@ router.patch('/api/records/:recordId', async (req, res) => {
     if (!data) {
       return apiFailure(res, 403, 'You do not have permission to edit this record.');
     }
-    return apiSuccess(res, 200, data, 'Record updated successfully.');
+    return apiSuccess(
+      res,
+      200,
+      await presentRecord(req.supabase, data),
+      'Record updated successfully.',
+    );
   } catch (error) {
     console.error('Failed to update record:', error);
     return apiFailure(res, 500, 'Could not update the record.');
