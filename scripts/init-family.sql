@@ -284,6 +284,7 @@ values ('family-attachments', 'family-attachments', false)
 on conflict (id) do update
 set public = false;
 
+
 -- Source: 20261022000100_rls_policies.sql
 -- Stage 3: Family-scoped authorization, RLS policies, and guarded approvals.
 -- Apply only after 20261022000000_initial_schema.sql.
@@ -1005,6 +1006,7 @@ using (
   )
 );
 
+
 -- Source: 20261022000200_repair_records_insert_policy.sql
 drop policy if exists records_insert_as_self
 on public.records;
@@ -1029,6 +1031,7 @@ with check (
   )
 );
 
+
 -- Source: 20261024000001_require_readable_schedule_change_target.sql
 drop policy if exists schedule_change_requests_insert_active_requester
 on public.schedule_change_requests;
@@ -1045,6 +1048,7 @@ with check (
   and public.can_read_record(schedule_change_requests.record_id)
   and public.is_active_family_role(schedule_change_requests.family_id)
 );
+
 
 -- Source: 20261024000002_allow_owner_record_returning.sql
 drop policy if exists records_select_readable
@@ -1063,6 +1067,7 @@ using (
   )
 );
 
+
 -- Source: 20261024000003_approve_schedule_change_function.sql
 create or replace function public.approve_schedule_change(p_request_id uuid)
 returns void
@@ -1078,6 +1083,7 @@ $$;
 revoke all on function public.approve_schedule_change(uuid) from public;
 grant execute on function public.approve_schedule_change(uuid) to authenticated;
 
+
 -- Source: 20261024000004_restrict_approve_function_execute.sql
 revoke all on function public.approve_schedule_change(uuid)
 from public, anon, service_role;
@@ -1088,6 +1094,7 @@ revoke all on function public.approve_schedule_change(uuid, boolean, text)
 from public, anon, service_role;
 grant execute on function public.approve_schedule_change(uuid, boolean, text)
 to authenticated;
+
 
 -- Source: 20261024000005_limit_family_attachments_to_10mb.sql
 do $$
@@ -1102,6 +1109,7 @@ begin
   end if;
 end;
 $$;
+
 
 -- Source: 20261024000006_fix_guest_cannot_request.sql
 -- Guest 不可提交 schedule change request；只限可讀取目標記錄的家庭成員。
@@ -1238,6 +1246,7 @@ $$;
 revoke all on function public.search_family_memories(vector, integer) from public;
 grant execute on function public.search_family_memories(vector, integer) to authenticated;
 
+
 -- Source: 20261028000002_reminders.sql
 create table public.reminders (
   id uuid primary key default gen_random_uuid(),
@@ -1336,6 +1345,7 @@ revoke all on function public.guard_reminder_source_memory() from public;
 revoke all on public.reminders from anon, public;
 grant select, insert, update, delete on public.reminders to authenticated;
 grant all on public.reminders to service_role;
+
 
 -- Source: 20261028000003_family_memory_metrics.sql
 create index if not exists family_memories_embedding_l2_hnsw_idx
@@ -1443,12 +1453,14 @@ grant execute on function public.search_family_memories(vector, integer) to auth
 grant execute on function public.search_family_memories_l2(vector, integer) to authenticated;
 grant execute on function public.search_family_memories_inner_product(vector, integer) to authenticated;
 
+
 -- Source: 20261028000005_family_member_active_flag.sql
 alter table public.family_members
   add column if not exists is_active boolean generated always as (status = 'active') stored;
 
 create index if not exists reminders_family_due_at_idx
   on public.reminders (family_id, due_at);
+
 
 -- Source: 20261028000006_security_logs.sql
 -- Use the next unused migration version after the existing Family Memory migrations.
@@ -1491,6 +1503,7 @@ revoke all on public.security_logs from anon, public;
 grant select, insert on public.security_logs to authenticated;
 grant all on public.security_logs to service_role;
 
+
 -- Source: 20261028000007_family_memory_placeholder_search.sql
 create or replace function public.search_family_memories_placeholder(
   query_embedding vector(384),
@@ -1525,6 +1538,7 @@ $$;
 
 revoke all on function public.search_family_memories_placeholder(vector, integer) from public;
 grant execute on function public.search_family_memories_placeholder(vector, integer) to authenticated;
+
 
 -- Source: 20261028000008_family_memories_bge.sql
 alter table public.family_memories
@@ -1587,6 +1601,7 @@ $$;
 
 revoke all on function public.search_family_memories(vector, integer) from public;
 grant execute on function public.search_family_memories(vector, integer) to authenticated;
+
 
 -- Source: 20261028000009_family_memory_placeholder_threshold.sql
 create or replace function public.search_family_memories_placeholder(
