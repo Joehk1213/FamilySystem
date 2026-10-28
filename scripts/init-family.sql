@@ -1649,4 +1649,14 @@ revoke all on function public.search_family_memories_placeholder(vector, integer
 grant execute on function public.search_family_memories_placeholder(vector, integer) to authenticated;
 
 
+-- Source: 20261028000010_family_encryption_pgcrypto.sql
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+ALTER TABLE public.records
+  ADD COLUMN IF NOT EXISTS encrypted_content BYTEA;
+
+COMMENT ON COLUMN public.records.encrypted_content IS
+  'Reserved for sensitive content encrypted at rest; the application layer must decrypt it. This column does not encrypt data or manage keys by itself.';
+
+
 COMMIT;
