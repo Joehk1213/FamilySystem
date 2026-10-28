@@ -16,7 +16,11 @@ function getModelPath() {
     return path.resolve(process.env.FAMILY_RAG_MODEL_PATH);
   }
 
-  return 'C:\\docker-data\\family\\rag\\models\\bge-small-zh-v1.5';
+  return 'C:\\docker-data\\family-rag\\models';
+}
+
+function isPlaceholder() {
+  return embeddingMode === PLACEHOLDER_MODE;
 }
 
 function getEmbeddingInfo() {
@@ -170,4 +174,5 @@ module.exports = {
   embedTexts,
   getEmbeddingInfo,
   getModelPath,
+  isPlaceholder,
 };

@@ -1,24 +1,19 @@
 function startServer() {
   try {
-    const hasPublicSupabaseConfig = [
-      'SUPABASE_URL',
-      'SUPABASE_ANON_KEY',
-      'FAMILY_ID',
-    ].every((key) => process.env[key]);
-    if (!hasPublicSupabaseConfig) {
-      require('dotenv').config({
-        path: process.env.DOTENV_CONFIG_PATH || '.env',
-      });
-    }
+    require('dotenv').config({
+      path: process.env.DOTENV_CONFIG_PATH || '.env',
+    });
 
     const cors = require('cors');
     const express = require('express');
+    const { createClient } = require('@supabase/supabase-js');
     const path = require('path');
     const configRouter = require('./routes/config');
     const healthRouter = require('./routes/health');
     const memoriesRouter = require('./routes/memories');
     const recordsRouter = require('./routes/records');
     const remindersRouter = require('./routes/reminders');
+    const { startReminderScheduler } = require('./jobs/reminderScheduler');
     const telegramRouter = require('./routes/telegram');
     const apiErrorHandler = require('./middleware/apiErrorHandler');
     const app = express();
@@ -44,6 +39,29 @@ function startServer() {
 
     const server = app.listen(port, () => {
       console.log(`Family Calendar API listening on port ${port}`);
+      if (process.env.NODE_ENV === 'test') {
+        return;
+      }
+
+      const { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY } = process.env;
+      if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY
+        || SUPABASE_SERVICE_ROLE_KEY === SUPABASE_ANON_KEY) {
+        console.error('Reminder scheduler not started: server-side Supabase credentials are missing or unsafe.');
+        return;
+      }
+
+      try {
+        const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+          auth: {
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+            persistSession: false,
+          },
+        });
+        startReminderScheduler(supabaseAdmin);
+      } catch (error) {
+        console.error('Reminder scheduler startup failed:', error);
+      }
     });
 
     server.on('error', (error) => {

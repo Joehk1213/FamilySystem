@@ -1648,4 +1648,5 @@ $$;
 revoke all on function public.search_family_memories_placeholder(vector, integer) from public;
 grant execute on function public.search_family_memories_placeholder(vector, integer) to authenticated;
 
+
 COMMIT;

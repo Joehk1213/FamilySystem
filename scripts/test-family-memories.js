@@ -3,6 +3,7 @@ require('dotenv').config({
 });
 
 const { createClient } = require('@supabase/supabase-js');
+const { randomUUID } = require('node:crypto');
 const {
   MAX_BATCH_SIZE,
   MAX_TEXT_LENGTH,
@@ -10,10 +11,12 @@ const {
   embedTexts,
   getEmbeddingInfo,
   getModelPath,
+  isPlaceholder,
 } = require('../source/rag/embed');
 
 const TEST_EMAIL = 'test.dad@family-calendar.test';
 const TEST_CONTENT = 'Fictional family test memory: the blue kite is stored for Saturday.';
+const INGEST_SOURCE_FILE = `fictional-ingestion-${randomUUID()}.txt`;
 
 async function expectRangeError(operation, message) {
   try {
@@ -63,8 +66,9 @@ async function run() {
   const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-  let memoryId;
+  const memoryIds = [];
   const signedInClients = [];
+  let profileId;
   let checks = 0;
 
   try {
@@ -78,6 +82,7 @@ async function run() {
     if (!sessionData.user) {
       throw new Error('The fictional test account could not sign in.');
     }
+    profileId = sessionData.user.id;
     signedInClients.push(userClient);
     checks += 1;
 
@@ -99,7 +104,8 @@ async function run() {
     const embeddingInfo = getEmbeddingInfo();
     if (embedding.length !== embeddingInfo.dimensions
       || ![384, 512].includes(embedding.length)
-      || Math.abs(embeddingNorm - 1) > 1e-6) {
+      || Math.abs(embeddingNorm - 1) > 1e-6
+      || isPlaceholder() !== (embeddingInfo.mode === 'local-feature-hash-placeholder')) {
       throw new Error('Chinese text embedding must be normalized and match the reported model dimensions.');
     }
     const boundaryBatch = await embedTexts(Array(MAX_BATCH_SIZE).fill('boundary'));
@@ -141,18 +147,52 @@ async function run() {
     if (insertError) {
       throw insertError;
     }
-    memoryId = inserted.id;
+    memoryIds.push(inserted.id);
     checks += 1;
 
     const appUrl = process.env.FAMILY_APP_URL
       || `http://127.0.0.1:${process.env.PORT || 3000}`;
     const authorization = `Bearer ${sessionData.session.access_token}`;
+    const ingestionChunks = [
+      'Fictional family ingestion test chunk one: blue kite preparations.',
+      'Fictional family ingestion test chunk two: test picnic checklist.',
+      'Fictional family ingestion test chunk three: pretend Saturday plan.',
+    ];
+    const ingestionResponse = await fetch(`${appUrl}/api/memories/ingest`, {
+      method: 'POST',
+      headers: {
+        Authorization: authorization,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chunks: ingestionChunks.map((content, index) => ({
+          content,
+          source_file_name: INGEST_SOURCE_FILE,
+          metadata: { chunk_index: index + 1, chunk_count: ingestionChunks.length },
+        })),
+      }),
+    });
+    const ingestionResult = await ingestionResponse.json();
+    if (!ingestionResponse.ok || !ingestionResult.success
+      || ingestionResult.data.insertedCount !== ingestionChunks.length
+      || ingestionResult.data.items.length !== ingestionChunks.length
+      || ingestionResult.data.items.some((memory, index) => (
+        memory.content !== ingestionChunks[index]
+        || memory.source_file_name !== INGEST_SOURCE_FILE
+        || memory.created_by !== sessionData.user.id
+        || memory.metadata?.chunk_index !== index + 1
+      ))) {
+      throw new Error(ingestionResult.message || 'Authenticated file-memory ingestion failed.');
+    }
+    memoryIds.push(...ingestionResult.data.items.map((memory) => memory.id));
+    checks += 1;
+
     const historyResponse = await fetch(`${appUrl}/api/memories`, {
       headers: { Authorization: authorization },
     });
     const historyResult = await historyResponse.json();
     if (!historyResponse.ok || !historyResult.success
-      || !historyResult.data.some((memory) => memory.id === memoryId)) {
+      || !historyResult.data.some((memory) => memory.id === inserted.id)) {
       throw new Error(historyResult.message || 'Authenticated memory history did not return the saved fixture.');
     }
     checks += 1;
@@ -170,7 +210,7 @@ async function run() {
     });
     const workerResult = await workerHistory.json();
     if (!workerHistory.ok || !workerResult.success
-      || !workerResult.data.some((memory) => memory.id === memoryId)) {
+      || !workerResult.data.some((memory) => memory.id === inserted.id)) {
       throw new Error('An active same-family Worker could not read family memory.');
     }
     checks += 1;
@@ -188,7 +228,7 @@ async function run() {
     });
     const pendingResult = await pendingHistory.json();
     if (!pendingHistory.ok || !pendingResult.success
-      || pendingResult.data.some((memory) => memory.id === memoryId)) {
+      || pendingResult.data.some((memory) => memory.id === inserted.id)) {
       throw new Error('A pending account could read active family memory.');
     }
     checks += 1;
@@ -212,10 +252,10 @@ async function run() {
       || !searchResult.data.final) {
       throw new Error('Memory search did not return the four-agent security and citation payload.');
     }
-    if (!searchResult.data.matches.some((match) => match.id === memoryId)) {
+    if (!searchResult.data.matches.some((match) => match.id === inserted.id)) {
       throw new Error('Authenticated family memory search did not return the saved fixture.');
     }
-    const match = searchResult.data.matches.find((item) => item.id === memoryId);
+    const match = searchResult.data.matches.find((item) => item.id === inserted.id);
     if (!Number.isFinite(match.distance)
       || (match.source_file || match.source_file_name) !== 'fictional-test.txt'
       || !match.created_at
@@ -236,15 +276,25 @@ async function run() {
     }
     checks += 1;
 
-    console.log(`Family memories integration: ${checks}/8 checks passed (active membership, normalized embeddings, ${MAX_BATCH_SIZE}-text batch and ${MAX_TEXT_LENGTH}-character boundaries, same-family access, cosine citations, unrelated-query filtering).`);
+    console.log(`Family memories integration: ${checks}/9 checks passed (active membership, normalized embeddings, ${MAX_BATCH_SIZE}-text batch and ${MAX_TEXT_LENGTH}-character boundaries, three-chunk authenticated ingestion, same-family access, cosine citations, unrelated-query filtering).`);
   } finally {
-    if (memoryId) {
+    for (const memoryId of memoryIds) {
       const { error: deleteError } = await adminClient
         .from('family_memories')
         .delete()
         .eq('id', memoryId);
       if (deleteError) {
         throw deleteError;
+      }
+    }
+    if (profileId) {
+      const { error: ingestionCleanupError } = await adminClient
+        .from('family_memories')
+        .delete()
+        .eq('created_by', profileId)
+        .eq('source_file', INGEST_SOURCE_FILE);
+      if (ingestionCleanupError) {
+        throw ingestionCleanupError;
       }
     }
     for (const client of signedInClients) {

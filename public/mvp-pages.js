@@ -629,7 +629,7 @@ function memoryText(key) {
       input: '輸入問題或要保存的文字',
       placeholder: '例如：測試家庭的虛構活動安排',
       file: '拖放或選取文字檔',
-      fileHint: '只支援 .txt、.md、.csv、.json；每個檔案最多 64 KB。',
+      fileHint: '只支援 .txt、.md；每個檔案最多 64 KB。',
       search: '搜尋記憶',
       save: '保存為家庭記憶',
       searching: '正在搜尋…',
@@ -639,11 +639,12 @@ function memoryText(key) {
       searchHint: '模型從伺服器本機載入；模型目錄缺失時會使用 feature-hash placeholder，並非 BGE 語義搜尋。',
       saved: '家庭記憶已保存。',
       searched: '搜尋完成。',
-      fileLoaded: '文字檔已在本機讀取，核對後再搜尋或保存。',
-      fileTypeError: '只可加入 .txt、.md、.csv 或 .json 文字檔。',
+      fileLoaded: '文字檔已在本機讀取。',
+      fileIngested: '文字檔記憶已完成匯入。',
+      fileTypeError: '只可加入 .txt 或 .md 文字檔。',
       fileSizeError: '檔案不可大於 64 KB。',
       fileReadError: '無法在本機讀取此檔案。',
-      fileContentTooLong: '檔案文字不可超過 12,000 個字元。',
+      fileEmptyError: '檔案沒有可匯入的文字。',
       emptyError: '請輸入文字或選擇文字檔。',
       calendar: '查看日曆與行程',
       source: '來源',
@@ -669,7 +670,7 @@ function memoryText(key) {
       input: 'Enter a question or text to save',
       placeholder: 'For example: a fictional activity plan for the test family',
       file: 'Drop or choose a text file',
-      fileHint: 'Supported: .txt, .md, .csv, .json; maximum 64 KB per file.',
+      fileHint: 'Supported: .txt and .md; maximum 64 KB per file.',
       search: 'Search memories',
       save: 'Save as family memory',
       searching: 'Searching…',
@@ -679,11 +680,12 @@ function memoryText(key) {
       searchHint: 'The model loads from the server filesystem. If it is missing, search uses a feature-hash placeholder, not BGE semantic weights.',
       saved: 'Family memory saved.',
       searched: 'Search complete.',
-      fileLoaded: 'Text file read locally. Review it before searching or saving.',
-      fileTypeError: 'Only .txt, .md, .csv, or .json text files are supported.',
+      fileLoaded: 'Text file read locally.',
+      fileIngested: 'Text file memories have been ingested.',
+      fileTypeError: 'Only .txt or .md text files are supported.',
       fileSizeError: 'The file must be 64 KB or smaller.',
       fileReadError: 'Could not read this file locally.',
-      fileContentTooLong: 'Extracted file text must be 12,000 characters or less.',
+      fileEmptyError: 'The file has no text to ingest.',
       emptyError: 'Enter text or choose a text file.',
       calendar: 'Open calendar and schedule',
       source: 'Source',
@@ -736,7 +738,7 @@ function renderFamilyChatPage() {
               placeholder="${memoryText('placeholder')}"></textarea>
           </label>
           <label class="family-chat-drop" data-memory-drop>
-            <input type="file" data-memory-file accept=".txt,.md,.csv,.json,text/plain,text/markdown,text/csv,application/json">
+            <input type="file" data-memory-file accept=".txt,.md,text/plain,text/markdown">
             <span class="family-chat-drop-title">${memoryText('file')}</span>
             <span class="family-chat-drop-hint" data-file-hint>${memoryText('fileHint')}</span>
           </label>
@@ -961,8 +963,12 @@ async function handleMemorySave() {
 }
 
 async function loadMemoryFile(file) {
+  if (root.dataset.memoryIngesting === 'true') {
+    return;
+  }
+
   const extension = file.name.split('.').pop().toLowerCase();
-  if (!['txt', 'md', 'csv', 'json'].includes(extension)) {
+  if (!['txt', 'md'].includes(extension)) {
     showMemoryMessage(memoryText('fileTypeError'), true);
     return;
   }
@@ -971,19 +977,68 @@ async function loadMemoryFile(file) {
     return;
   }
 
+  const fileInput = root.querySelector('[data-memory-file]');
+  const fileHint = root.querySelector('[data-file-hint]');
+  let chunks = [];
+  let ingested = 0;
+  root.dataset.memoryIngesting = 'true';
+  fileInput.disabled = true;
+
   try {
     const content = await file.text();
-    if (content.length > 12000) {
-      showMemoryMessage(memoryText('fileContentTooLong'), true);
+    fileHint.textContent = `${file.name} · ${memoryText('fileLoaded')}`;
+    showMemoryMessage(memoryText('fileLoaded'));
+    const characters = Array.from(content);
+    for (let start = 0; start < characters.length; start += 800) {
+      const chunk = characters.slice(start, start + 1000).join('').trim();
+      if (chunk) {
+        chunks.push(chunk);
+      }
+      if (start + 1000 >= characters.length) {
+        break;
+      }
+    }
+    if (!chunks.length) {
+      showMemoryMessage(memoryText('fileEmptyError'), true);
       return;
     }
-    root.querySelector('[data-memory-input]').value = content;
-    root.dataset.memorySource = file.name;
-    root.querySelector('[data-file-hint]').textContent = `${file.name} · ${memoryText('fileLoaded')}`;
-    showMemoryMessage(memoryText('fileLoaded'));
+
+    for (let index = 0; index < chunks.length; index += 1) {
+      const result = await authenticatedApiRequest('/api/memories/ingest', 'POST', {
+        chunks: [{
+          content: chunks[index],
+          source_file_name: file.name,
+          metadata: {
+            chunk_index: index + 1,
+            chunk_count: chunks.length,
+          },
+        }],
+      });
+      if (result.insertedCount !== 1) {
+        throw new Error('The family memory service did not confirm the chunk write.');
+      }
+      ingested += 1;
+      const progress = language === 'en'
+        ? `Ingested ${ingested}/${chunks.length} chunks`
+        : `已寫入 ${ingested}/${chunks.length} 段`;
+      showMemoryMessage(progress);
+      fileHint.textContent = `${file.name} · ${progress}`;
+    }
+
+    root.dataset.memorySource = '';
+    fileInput.value = '';
+    showMemoryMessage(`${memoryText('fileIngested')} ${ingested}/${chunks.length}`);
+    await loadMemoryHistory();
   } catch (error) {
-    console.error('Could not read family memory text file:', error);
-    showMemoryMessage(memoryText('fileReadError'), true);
+    console.error('Could not ingest family memory text file:', error);
+    const progress = language === 'en'
+      ? `Ingested ${ingested}/${chunks.length} chunks before failure.`
+      : `失敗前已寫入 ${ingested}/${chunks.length} 段。`;
+    showMemoryMessage(`${progress} ${error.message || memoryText('fileReadError')}`, true);
+  } finally {
+    delete root.dataset.memoryIngesting;
+    fileInput.disabled = false;
+    fileInput.value = '';
   }
 }
 

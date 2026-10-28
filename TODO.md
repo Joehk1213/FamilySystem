@@ -13,6 +13,7 @@
   - [ ] 待自行設定 Telegram 測試 bot／webhook secret／test chat ID，完成 live webhook 驗證；不得使用真實家庭內容
 - [x] Task 2.3: 【用戶已批准非 MVP 擴展】Family Memory/RAG、家庭提醒及引用；新增獨立 migrations、同家庭 active-member RLS、`/chat` 及 `/today` 總覽。程式會嘗試由本機 `FAMILY_RAG_MODEL_PATH` 載入 bge-small-zh-v1.5，無權重或維度不符時明確記錄 `using placeholder` 並回退至 384D normalized feature-hash；不可視為已載入真實權重
   - [x] Reminder API、同家庭資料隔離、source memory 家庭範圍檢查及 cosine/L2/inner-product 搜尋
+  - [x] family-file-ingestion-bge-housekeeper：本機 `.txt`／`.md` 以 1,000 字元、200 overlap 分段後逐段經登入 API 入庫；未安裝本機權重時保留 placeholder 並明確記錄；加入每 15 分鐘、只記 log 的提醒 scheduler。
   - [ ] 待提供並驗證相容的本機 bge-small-zh-v1.5 權重；目前只有 placeholder 可用，搜尋結果只供虛構測試資料原型使用
   - [ ] 記憶內容目前由 RLS 隔離但未加密；不得輸入真實家庭或敏感個人資料，端對端／資料庫加密仍待另行設計
 - [x] Task 2.4: 【用戶已批准非 MVP 擴展】加入本機多代理記憶查詢流程：安全檢查及 `security_logs`、同家庭 RAG librarian、無外網 analyst、引用 editor 及 orchestrator；`/api/memories/search` 要求登入並回傳安全狀態、引用及 metadata；`/chat` 顯示安全 badge、回答及 MEMORY 引用。`source/DB_SCHEMA_DRAFT.sql` 未修改。

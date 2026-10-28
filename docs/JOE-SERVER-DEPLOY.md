@@ -112,9 +112,9 @@ npm start
 
 ## Family Memory 本機模型
 
-Family Memory 的模型檔只從本機載入，不會由 runtime 連外下載。JOE-SERVER 預設模型目錄為 `D:\docker-data\family\rag\models\bge-small-zh-v1.5`；C: disposable 環境為 `C:\docker-data\family\rag\models\bge-small-zh-v1.5`。如需自訂路徑，在 `.env.docker` 設定 `FAMILY_RAG_MODEL_PATH`。Node.js 使用 Transformers.js 本機 ONNX 模型；`scripts/rag/embed_worker.py` 提供 Python SentenceTransformers 批次工具，依賴安裝方式為 `python -m pip install -r requirements.txt`。
+Family Memory 的模型檔只從本機載入，不會由 runtime 連外下載。Node.js 預設模型目錄為 C: disposable 環境的 `C:\docker-data\family-rag\models`；JOE-SERVER 使用 D: 時，將 `FAMILY_RAG_MODEL_PATH` 設為 `D:\docker-data\family-rag\models`。如模型放在其他本機目錄，亦可在 `.env.docker` 設定該變數。Node.js 使用 Transformers.js 本機 ONNX 模型；`scripts/rag/embed_worker.py` 提供 Python SentenceTransformers 批次工具，依賴安裝方式為 `python -m pip install -r requirements.txt`。
 
-本機 BGE 輸出為正規化 512 維向量；指定目錄不存在或模型載入失敗時，會清楚記錄 `using placeholder` 並以舊 384 維本機 feature-hash 暫代，絕不可描述為 BGE 語義搜尋。批次上限 64 筆、每筆文字上限 12,000 字元；兩種搜尋均使用 cosine 距離並排除距離大於 0.75 的結果，資料庫最多取 12 筆，`/chat` 最多顯示 5 張引用卡。部署前只使用 `@family-calendar.test` 虛構資料，Family Memory 目前沒有端對端或資料庫加密。
+本機 BGE 輸出為正規化 512 維向量；指定目錄不存在或模型載入失敗時，會清楚記錄 `using placeholder` 並以舊 384 維本機 feature-hash 暫代，絕不可描述為 BGE 語義搜尋。`/chat` 只在瀏覽器本機讀取 `.txt`／`.md`，按 1,000 字元、200 字元重疊逐段送到登入保護的 `/api/memories/ingest`；不使用 Storage upload。提醒 scheduler 由後端每 15 分鐘檢查一小時內未完成提醒，只記錄提醒 ID、家庭 ID 及到期時間，不發送外部通知。批次上限 64 筆、每筆文字上限 12,000 字元；兩種搜尋均使用 cosine 距離並排除距離大於 0.75 的結果，資料庫最多取 12 筆，`/chat` 最多顯示 5 張引用卡。`npm run test:family-memories` 覆蓋 64/65 筆及 12,000/12,001 字元邊界；`npm run test:reminders` 覆蓋到期排序與完成切換。`scripts/init-family.sql` 由所有 migrations 按檔名排序產生，只有一組外層 `BEGIN`／`COMMIT`；已初始化資料庫只可用於 schema 檢查，不可重播該 bundle。部署前只使用 `@family-calendar.test` 虛構資料，Family Memory 目前沒有端對端或資料庫加密。
 
 ## 5. TLS、網路及持續運行
 
