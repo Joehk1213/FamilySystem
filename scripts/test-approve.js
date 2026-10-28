@@ -1,3 +1,5 @@
+require('dotenv').config({ path: process.env.DOTENV_CONFIG_PATH || '.env' });
+
 const { createClient } = require('@supabase/supabase-js');
 
 const FAMILY_ID = '11111111-1111-4111-8111-111111111111';

@@ -1,0 +1,35 @@
+:80 {
+	route {
+		@allowedOrigin header Origin {env.CORS_ALLOWED_ORIGIN}
+		header @allowedOrigin >Access-Control-Allow-Origin {env.CORS_ALLOWED_ORIGIN}
+		header @allowedOrigin Access-Control-Allow-Methods "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS"
+		header @allowedOrigin Access-Control-Allow-Headers "Accept, Authorization, Content-Type, X-Client-Info, apikey, x-supabase-api-version, accept-profile, content-profile, x-retry-count, prefer, range, range-unit, content-range, cache-control"
+		header @allowedOrigin Vary Origin
+
+		@preflight method OPTIONS
+		handle @preflight {
+			header Access-Control-Allow-Origin {env.CORS_ALLOWED_ORIGIN}
+			header Access-Control-Allow-Methods "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS"
+			header Access-Control-Allow-Headers "Accept, Authorization, Content-Type, X-Client-Info, apikey, x-supabase-api-version, accept-profile, content-profile, x-retry-count, prefer, range, range-unit, content-range, cache-control"
+			header Access-Control-Max-Age "3600"
+			header Vary Origin
+			respond "" 204
+		}
+
+		handle_path /auth/v1/* {
+			reverse_proxy auth:9999
+		}
+
+		handle_path /rest/v1/* {
+			reverse_proxy rest:3000
+		}
+
+		handle_path /storage/v1/* {
+			reverse_proxy storage:5000
+		}
+
+		handle {
+			respond "Not found" 404
+		}
+	}
+}

@@ -2,7 +2,7 @@ const express = require('express');
 
 const router = express.Router();
 
-router.get('/api/health', (req, res) => {
+router.get(['/health', '/api/health'], (req, res) => {
   try {
     return res.status(200).json({
       success: true,

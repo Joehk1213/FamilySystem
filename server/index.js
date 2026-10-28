@@ -6,7 +6,9 @@ function startServer() {
       'FAMILY_ID',
     ].every((key) => process.env[key]);
     if (!hasPublicSupabaseConfig) {
-      require('dotenv').config();
+      require('dotenv').config({
+        path: process.env.DOTENV_CONFIG_PATH || '.env',
+      });
     }
 
     const cors = require('cors');
@@ -14,7 +16,9 @@ function startServer() {
     const path = require('path');
     const configRouter = require('./routes/config');
     const healthRouter = require('./routes/health');
+    const memoriesRouter = require('./routes/memories');
     const recordsRouter = require('./routes/records');
+    const remindersRouter = require('./routes/reminders');
     const telegramRouter = require('./routes/telegram');
     const apiErrorHandler = require('./middleware/apiErrorHandler');
     const app = express();
@@ -24,9 +28,11 @@ function startServer() {
     app.use(express.json());
     app.use(configRouter);
     app.use(healthRouter);
+    app.use(memoriesRouter);
     app.use(recordsRouter);
+    app.use(remindersRouter);
     app.use(telegramRouter);
-    app.get(['/login', '/today', '/record/new', '/approve'], (req, res, next) => {
+    app.get(['/login', '/today', '/record/new', '/approve', '/chat'], (req, res, next) => {
       res.sendFile(path.join(__dirname, '..', 'public', 'index.html'), (error) => {
         if (error) {
           next(error);

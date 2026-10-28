@@ -51,6 +51,16 @@ Migration `supabase/migrations/20261022000100_rls_policies.sql` 實作記錄讀�
 
 ## MVP 1.0 雙 Notebook 快速開始
 
+JOE-SERVER 自託管 Supabase（Postgres、Auth、Storage、PostgREST）設定及安全部署步驟見 [自託管部署指南](docs/SUPABASE-SELFHOST.md)；無網路映像匯出／匯入流程見 [JOE-SERVER 部署指南](docs/JOE-SERVER-DEPLOY.md)。此部署使用獨立的 `.env.docker`；不要覆寫現有 `.env`。
+
+## 已批准擴展：Family Memory 原型
+
+登入後可由 `/chat` 開啟家庭記憶介面；文字及 `.txt`／`.md`／`.csv`／`.json` 內容只會送到本機 Family Calendar API 和目前設定的 Supabase，不會呼叫 OpenRouter 或其他 AI 服務。檔案在瀏覽器本機讀取，單檔最多 64 KB、文字最多 12,000 字元。日曆記錄及私人日記不會自動匯入；日曆和未來 7 日行程仍在 `/today`。
+
+Migrations `20261028000001_family_memories.sql` 至 `20261028000003_family_memory_metrics.sql` 建立 pgvector `family_memories`、家庭提醒及 cosine/L2/inner-product 搜尋；`20261028000002_reminders.sql` 使用既有 active-family RLS helper，並拒絕跨家庭 MEMORY 關聯。`/today` 顯示未來 7 日可讀行程、未完成提醒及最近 5 條 MEMORY。Embedding 會嘗試由本機 `FAMILY_RAG_MODEL_PATH`（未設定時按 `FAMILY_DATA_ROOT` 推導，C: 預設 `C:\docker-data\family-rag\models`，JOE-SERVER D: 為 `D:\docker-data\family-rag\models`）載入 bge-small-zh-v1.5；不會連外下載模型或呼叫 AI API。模型缺失、載入失敗或輸出維度不符時，會記錄 `using placeholder` 並回退至 384 維 normalized feature-hash；不得聲稱已載入權重。資料只有 RLS 隔離、沒有端對端或資料庫加密；只准用虛構 `@family-calendar.test` 資料。
+
+在本機 disposable stack 啟動應用後，可用 `$env:DOTENV_CONFIG_PATH='.env.docker'; npm run test:family-memories` 驗證 authenticated API、同家庭 Worker、pending 隔離及搜尋；測試只建立並清除虛構 fixture。Gateway 的 `CORS_ALLOWED_ORIGIN` 必須設定成唯一的瀏覽器前端 origin，不可設成 `*`。
+
 本文按**公司 Notebook 為 Primary、屋企 `JOE-Desktop` 為 recovery node**。兩部機各自運行本機 Supabase；OneDrive 傳送 CMS 加密備份，唔係即時複寫。完整架構、Tailscale 限制、憑證安裝及 Only-if-empty 還原流程見 [雙 Notebook 設定](docs/DUAL_NB_SETUP.md)。
 
 Primary 本機開發：

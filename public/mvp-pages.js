@@ -1,6 +1,6 @@
 const SUPABASE_MODULE_URL = 'https://esm.sh/@supabase/supabase-js@2.118.0';
 const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
-const MVP_ROUTES = ['/login', '/today', '/record/new', '/approve'];
+const MVP_ROUTES = ['/login', '/today', '/record/new', '/approve', '/chat'];
 const root = document.querySelector('#app');
 
 const labels = {
@@ -75,6 +75,7 @@ const labels = {
     requestLoading: '正在提交…',
     navToday: '今日',
     navCreate: '新增記錄',
+    navChat: '家庭記憶',
     note: '審批備註',
   },
   en: {
@@ -147,6 +148,7 @@ const labels = {
     requestLoading: 'Submitting…',
     navToday: 'Today',
     navCreate: 'New record',
+    navChat: 'Family Memory',
     note: 'Decision note',
   },
 };
@@ -215,6 +217,7 @@ function renderShell(content, { page = '', showNav = true, notice = '' } = {}) {
     ? `
       <nav class="mvp-nav" aria-label="${language === 'en' ? 'Main navigation' : '主要導覽'}">
         <a href="/today" ${page === '/today' ? 'aria-current="page"' : ''}>${t('navToday')}</a>
+        <a href="/chat" ${page === '/chat' ? 'aria-current="page"' : ''}>${t('navChat')}</a>
         ${canCreate ? `<a href="/record/new" ${page === '/record/new' ? 'aria-current="page"' : ''}>${t('navCreate')}</a>` : ''}
         ${canApprove ? `<a href="/approve" ${page === '/approve' ? 'aria-current="page"' : ''}>${t('approve')}</a>` : ''}
       </nav>
@@ -362,6 +365,44 @@ function renderPageLoading(message = t('loading')) {
 
 function renderTodayPage() {
   renderShell(`
+    <section class="family-overview">
+      <div class="family-overview-heading">
+        <h2>${overviewText('title')}</h2>
+        <p>${overviewText('description')}</p>
+      </div>
+      <div class="family-overview-grid">
+        <article class="family-overview-card">
+          <h3>${overviewText('events')}</h3>
+          <div data-overview-events><p class="mvp-loading">${t('loading')}</p></div>
+        </article>
+        <article class="family-overview-card">
+          <h3>${overviewText('reminders')}</h3>
+          <div data-overview-reminders><p class="mvp-loading">${t('loading')}</p></div>
+          <form class="family-overview-reminder-form" data-reminder-form>
+            <label class="mvp-field">
+              <span>${overviewText('reminderTitle')}</span>
+              <input name="title" type="text" maxlength="500" required>
+            </label>
+            <label class="mvp-field">
+              <span>${overviewText('dueAt')}</span>
+              <input name="dueAt" type="datetime-local" required>
+            </label>
+            <label class="mvp-field">
+              <span>${overviewText('sourceMemory')}</span>
+              <select name="sourceMemoryId" data-reminder-source>
+                <option value="">${overviewText('noMemory')}</option>
+              </select>
+            </label>
+            <button class="mvp-button" type="submit" data-action="save-reminder">${overviewText('saveReminder')}</button>
+            <p class="family-overview-message" data-reminder-message role="status" hidden></p>
+          </form>
+        </article>
+        <article class="family-overview-card">
+          <h3>${overviewText('memories')}</h3>
+          <div data-overview-memories><p class="mvp-loading">${t('loading')}</p></div>
+        </article>
+      </div>
+    </section>
     <section class="mvp-page-heading">
       <div>
         <h2>${t('today')}</h2>
@@ -377,10 +418,551 @@ function renderTodayPage() {
       <p class="mvp-loading">${t('loading')}</p>
     </section>
   `, { page: '/today' });
+  root.querySelector('[data-reminder-form]')
+    .addEventListener('submit', handleReminderSave);
+  root.querySelector('[data-overview-reminders]')
+    .addEventListener('click', handleReminderToggle);
+  loadFamilyOverview();
   loadTodayRecords();
 }
 
-function localMidnightUtc(timeZone) {
+function overviewText(key) {
+  const text = {
+    zh: {
+      title: '未來 7 日一目了然',
+      description: '只顯示登入帳戶按 RLS 可讀取的行程、提醒及家庭記憶。',
+      events: '未來 7 日行程',
+      noEvents: '未來 7 日沒有可查看的行程。',
+      reminders: '未完成提醒',
+      noReminders: '未來 7 日沒有未完成提醒。',
+      reminderTitle: '提醒事項',
+      dueAt: '到期時間',
+      sourceMemory: '關聯 MEMORY（可選）',
+      noMemory: '不關聯記憶',
+      saveReminder: '儲存提醒',
+      savingReminder: '正在儲存…',
+      saveFailed: '無法儲存提醒',
+      savedReminder: '提醒已儲存。',
+      markDone: '標示完成',
+      markOpen: '還原未完成',
+      memories: '最近 5 條 MEMORY',
+      noMemories: '目前沒有家庭記憶。',
+      memorySource: '來源',
+      created: '建立時間',
+    },
+    en: {
+      title: 'Next 7 Days at a Glance',
+      description: 'Only events, reminders, and memories readable by your signed-in account under RLS are shown.',
+      events: 'Events in the Next 7 Days',
+      noEvents: 'No readable events in the next 7 days.',
+      reminders: 'Open Reminders',
+      noReminders: 'No open reminders due in the next 7 days.',
+      reminderTitle: 'Reminder',
+      dueAt: 'Due date and time',
+      sourceMemory: 'Link MEMORY (optional)',
+      noMemory: 'No linked memory',
+      saveReminder: 'Save reminder',
+      savingReminder: 'Saving…',
+      saveFailed: 'Could not save the reminder',
+      savedReminder: 'Reminder saved.',
+      markDone: 'Mark done',
+      markOpen: 'Reopen',
+      memories: '5 Most Recent MEMORY Items',
+      noMemories: 'No family memories have been added.',
+      memorySource: 'Source',
+      created: 'Created',
+    },
+  };
+  return text[language][key];
+}
+
+function renderOverviewError(container, error) {
+  container.innerHTML = `<p class="mvp-alert" role="alert">${escapeHtml(error.message || String(error))}</p>`;
+}
+
+async function loadFamilyOverview() {
+  const eventsBox = root.querySelector('[data-overview-events]');
+  const remindersBox = root.querySelector('[data-overview-reminders]');
+  const memoriesBox = root.querySelector('[data-overview-memories]');
+  if (!eventsBox || !remindersBox || !memoriesBox) {
+    return;
+  }
+
+  try {
+    const timeZone = family.timezone || 'Asia/Hong_Kong';
+    const start = localMidnightUtc(timeZone);
+    const end = localMidnightUtc(timeZone, 7);
+    const [eventsResult, reminders, memories] = await Promise.all([
+      supabase
+        .from('records')
+        .select('id, title, event_start, record_type')
+        .eq('family_id', membership.family_id)
+        .eq('record_kind', 'plan')
+        .eq('status', 'active')
+        .gte('event_start', start)
+        .lt('event_start', end)
+        .order('event_start', { ascending: true }),
+      authenticatedApiRequest('/api/reminders/list', 'GET'),
+      authenticatedApiRequest('/api/memories', 'GET'),
+    ]);
+    if (eventsResult.error) {
+      throw eventsResult.error;
+    }
+
+    const dueReminders = reminders.filter((reminder) => (
+      !reminder.is_done
+      && reminder.due_at
+      && reminder.due_at >= start
+      && reminder.due_at < end
+    ));
+    const recentMemories = memories.slice(0, 5);
+    eventsBox.innerHTML = eventsResult.data.length
+      ? `<ul class="family-overview-list">${eventsResult.data.map((record) => `
+          <li><span>${escapeHtml(record.title || t('visibleRecord'))}</span>
+            <time datetime="${escapeHtml(record.event_start)}">${escapeHtml(formatDate(record.event_start))}</time></li>
+        `).join('')}</ul>`
+      : `<p class="mvp-empty">${overviewText('noEvents')}</p>`;
+    remindersBox.innerHTML = dueReminders.length
+      ? `<ul class="family-overview-list">${dueReminders.map((reminder) => `
+          <li data-reminder-id="${escapeHtml(reminder.id)}">
+            <span>${escapeHtml(reminder.title)}
+              <small>${escapeHtml(formatDate(reminder.due_at))}</small>
+            </span>
+            <button class="mvp-button mvp-button-secondary" type="button"
+              data-toggle-reminder="${escapeHtml(reminder.id)}" data-next-done="true">
+              ${overviewText('markDone')}
+            </button>
+          </li>
+        `).join('')}</ul>`
+      : `<p class="mvp-empty">${overviewText('noReminders')}</p>`;
+    memoriesBox.innerHTML = recentMemories.length
+      ? `<ul class="family-overview-list family-overview-memory-list">${recentMemories.map((memory) => `
+          <li>
+            <span class="family-overview-memory-content">${escapeHtml(memory.content.slice(0, 180))}</span>
+            <small>${overviewText('memorySource')}: ${escapeHtml(memory.source_file_name || overviewText('memories'))}
+              · ${overviewText('created')}: ${escapeHtml(formatDate(memory.created_at))}</small>
+          </li>
+        `).join('')}</ul>`
+      : `<p class="mvp-empty">${overviewText('noMemories')}</p>`;
+
+    const sourceSelect = root.querySelector('[data-reminder-source]');
+    sourceSelect.innerHTML = `<option value="">${overviewText('noMemory')}</option>${recentMemories.map((memory) => `
+      <option value="${escapeHtml(memory.id)}">${escapeHtml(memory.source_file_name || memory.content.slice(0, 55))}</option>
+    `).join('')}`;
+  } catch (error) {
+    renderOverviewError(eventsBox, error);
+    renderOverviewError(remindersBox, error);
+    renderOverviewError(memoriesBox, error);
+  }
+}
+
+async function handleReminderSave(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('[data-action="save-reminder"]');
+  const message = form.querySelector('[data-reminder-message]');
+  const formData = new FormData(form);
+  const dueAt = formData.get('dueAt');
+  button.disabled = true;
+  button.textContent = overviewText('savingReminder');
+  message.hidden = true;
+
+  try {
+    const parsedDueAt = new Date(dueAt);
+    if (!dueAt || !Number.isFinite(parsedDueAt.getTime())) {
+      throw new Error(overviewText('dueAt'));
+    }
+    await authenticatedApiRequest('/api/reminders/save', 'POST', {
+      title: formData.get('title'),
+      dueAt: parsedDueAt.toISOString(),
+      sourceMemoryId: formData.get('sourceMemoryId') || null,
+    });
+    form.reset();
+    message.className = 'mvp-success family-overview-message';
+    message.textContent = overviewText('savedReminder');
+    message.hidden = false;
+    await loadFamilyOverview();
+  } catch (error) {
+    message.className = 'mvp-alert family-overview-message';
+    message.textContent = `${overviewText('saveFailed')}: ${error.message || String(error)}`;
+    message.hidden = false;
+  } finally {
+    button.disabled = false;
+    button.textContent = overviewText('saveReminder');
+  }
+}
+
+async function handleReminderToggle(event) {
+  const button = event.target.closest('[data-toggle-reminder]');
+  if (!button) {
+    return;
+  }
+  button.disabled = true;
+  try {
+    await authenticatedApiRequest('/api/reminders/toggle', 'POST', {
+      id: button.dataset.toggleReminder,
+      isDone: button.dataset.nextDone === 'true',
+    });
+    await loadFamilyOverview();
+  } catch (error) {
+    const item = button.closest('[data-reminder-id]');
+    const alert = document.createElement('p');
+    alert.className = 'mvp-alert';
+    alert.setAttribute('role', 'alert');
+    alert.textContent = error.message || String(error);
+    item.prepend(alert);
+    button.disabled = false;
+  }
+}
+
+function memoryText(key) {
+  const text = {
+    zh: {
+      title: '家庭記憶',
+      description: '只搜尋明確加入的家庭記憶；日曆記錄及私人日記不會自動匯入。',
+      privacy: '內容儲存在家庭資料庫，active 家庭成員可按 RLS 權限讀取；此原型沒有端對端或資料庫加密。只用虛構測試資料。',
+      history: '記憶紀錄',
+      historyEmpty: '尚未加入家庭記憶。',
+      historyLoading: '正在載入記憶…',
+      input: '輸入問題或要保存的文字',
+      placeholder: '例如：測試家庭的虛構活動安排',
+      file: '拖放或選取文字檔',
+      fileHint: '只支援 .txt、.md、.csv、.json；每個檔案最多 64 KB。',
+      search: '搜尋記憶',
+      save: '保存為家庭記憶',
+      searching: '正在搜尋…',
+      saving: '正在保存…',
+      resultTitle: '搜尋結果',
+      resultEmpty: '沒有找到符合的家庭記憶。',
+      searchHint: '模型從伺服器本機載入；模型目錄缺失時會使用 feature-hash placeholder，並非 BGE 語義搜尋。',
+      saved: '家庭記憶已保存。',
+      searched: '搜尋完成。',
+      fileLoaded: '文字檔已在本機讀取，核對後再搜尋或保存。',
+      fileTypeError: '只可加入 .txt、.md、.csv 或 .json 文字檔。',
+      fileSizeError: '檔案不可大於 64 KB。',
+      fileReadError: '無法在本機讀取此檔案。',
+      fileContentTooLong: '檔案文字不可超過 12,000 個字元。',
+      emptyError: '請輸入文字或選擇文字檔。',
+      calendar: '查看日曆與行程',
+      source: '來源',
+      citation: '引用 MEMORY',
+      distance: '距離',
+      creator: '建立者 ID',
+      createdAt: '建立時間',
+      securitySafe: '安全檢查：安全',
+      securityBlocked: '安全檢查：已阻擋',
+      securityReason: '原因',
+      finalAnswer: '家庭記憶回答',
+    },
+    en: {
+      title: 'Family Memory',
+      description: 'Search only memories added here. Calendar records and private diaries are never imported automatically.',
+      privacy: 'Stored in the family database and readable by active family members under RLS. This prototype does not provide end-to-end or database encryption. Use fictional test data only.',
+      history: 'Memory history',
+      historyEmpty: 'No family memories have been added.',
+      historyLoading: 'Loading memories…',
+      input: 'Enter a question or text to save',
+      placeholder: 'For example: a fictional activity plan for the test family',
+      file: 'Drop or choose a text file',
+      fileHint: 'Supported: .txt, .md, .csv, .json; maximum 64 KB per file.',
+      search: 'Search memories',
+      save: 'Save as family memory',
+      searching: 'Searching…',
+      saving: 'Saving…',
+      resultTitle: 'Search results',
+      resultEmpty: 'No matching family memories were found.',
+      searchHint: 'The model loads from the server filesystem. If it is missing, search uses a feature-hash placeholder, not BGE semantic weights.',
+      saved: 'Family memory saved.',
+      searched: 'Search complete.',
+      fileLoaded: 'Text file read locally. Review it before searching or saving.',
+      fileTypeError: 'Only .txt, .md, .csv, or .json text files are supported.',
+      fileSizeError: 'The file must be 64 KB or smaller.',
+      fileReadError: 'Could not read this file locally.',
+      fileContentTooLong: 'Extracted file text must be 12,000 characters or less.',
+      emptyError: 'Enter text or choose a text file.',
+      calendar: 'Open calendar and schedule',
+      source: 'Source',
+      citation: 'MEMORY CITATION',
+      distance: 'Distance',
+      creator: 'Creator ID',
+      createdAt: 'Created',
+      securitySafe: 'Security check: safe',
+      securityBlocked: 'Security check: blocked',
+      securityReason: 'Reason',
+      finalAnswer: 'Family memory answer',
+    },
+  };
+  return text[language][key];
+}
+
+function renderFamilyChatPage() {
+  renderShell(`
+    <section class="family-chat-layout">
+      <aside class="family-chat-sidebar" aria-label="${language === 'en' ? 'Memory history' : '家庭記憶紀錄'}">
+        <div class="family-chat-sidebar-heading">
+          <h2>${memoryText('history')}</h2>
+          <button class="mvp-button mvp-button-secondary" type="button" data-action="refresh-memories">
+            ${language === 'en' ? 'Refresh' : '重新載入'}
+          </button>
+        </div>
+        <div class="family-chat-history" data-memory-history aria-live="polite">
+          <p class="mvp-loading">${memoryText('historyLoading')}</p>
+        </div>
+      </aside>
+      <section class="family-chat-main">
+        <header class="family-chat-heading">
+          <div>
+            <h2>${memoryText('title')}</h2>
+            <p>${memoryText('description')}</p>
+          </div>
+          <a class="mvp-button mvp-button-secondary" href="/today">${memoryText('calendar')}</a>
+        </header>
+        <p class="family-chat-privacy">${memoryText('privacy')}</p>
+        <section class="family-chat-results" data-memory-results aria-live="polite">
+          <p class="mvp-empty">${memoryText('searchHint')}</p>
+        </section>
+        <form class="family-chat-composer" data-family-chat-form>
+          <label class="mvp-field" for="family-chat-input">
+            ${memoryText('input')}
+            <textarea id="family-chat-input" data-memory-input maxlength="12000" rows="5"
+              placeholder="${memoryText('placeholder')}"></textarea>
+          </label>
+          <label class="family-chat-drop" data-memory-drop>
+            <input type="file" data-memory-file accept=".txt,.md,.csv,.json,text/plain,text/markdown,text/csv,application/json">
+            <span class="family-chat-drop-title">${memoryText('file')}</span>
+            <span class="family-chat-drop-hint" data-file-hint>${memoryText('fileHint')}</span>
+          </label>
+          <div class="family-chat-actions">
+            <button class="mvp-button" type="submit" data-action="search-memories">${memoryText('search')}</button>
+            <button class="mvp-button mvp-button-secondary" type="button" data-action="save-memory">${memoryText('save')}</button>
+          </div>
+          <p class="family-chat-message" data-memory-message role="status" hidden></p>
+        </form>
+      </section>
+    </section>
+  `, { page: '/chat' });
+
+  root.querySelector('[data-action="refresh-memories"]')
+    .addEventListener('click', loadMemoryHistory);
+  root.querySelector('[data-family-chat-form]')
+    .addEventListener('submit', handleMemorySearch);
+  root.querySelector('[data-action="save-memory"]')
+    .addEventListener('click', handleMemorySave);
+  const fileInput = root.querySelector('[data-memory-file]');
+  const dropTarget = root.querySelector('[data-memory-drop]');
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) {
+      loadMemoryFile(fileInput.files[0]);
+    }
+  });
+  dropTarget.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    dropTarget.classList.add('is-dragging');
+  });
+  dropTarget.addEventListener('dragleave', () => {
+    dropTarget.classList.remove('is-dragging');
+  });
+  dropTarget.addEventListener('drop', (event) => {
+    event.preventDefault();
+    dropTarget.classList.remove('is-dragging');
+    const [file] = event.dataTransfer.files;
+    if (file) {
+      loadMemoryFile(file);
+    }
+  });
+  loadMemoryHistory();
+}
+
+async function authenticatedApiRequest(url, method, body) {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    throw error;
+  }
+  if (!data.session) {
+    throw new Error(t('login'));
+  }
+
+  const response = await fetch(url, {
+    method,
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${data.session.access_token}`,
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  let result;
+  try {
+    result = await response.json();
+  } catch (error) {
+    throw new Error(error.message || 'The family memory service returned an invalid response.');
+  }
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || 'The family memory request failed.');
+  }
+  return result.data;
+}
+
+function showMemoryMessage(message, isError = false) {
+  const box = root.querySelector('[data-memory-message]');
+  if (!box) {
+    return;
+  }
+  box.className = isError ? 'mvp-alert family-chat-message' : 'mvp-success family-chat-message';
+  box.textContent = message;
+  box.hidden = false;
+}
+
+async function loadMemoryHistory() {
+  const history = root.querySelector('[data-memory-history]');
+  if (!history) {
+    return;
+  }
+  history.innerHTML = `<p class="mvp-loading">${memoryText('historyLoading')}</p>`;
+  try {
+    const memories = await authenticatedApiRequest('/api/memories', 'GET');
+    if (!memories.length) {
+      history.innerHTML = `<p class="mvp-empty">${memoryText('historyEmpty')}</p>`;
+      return;
+    }
+    history.innerHTML = memories.map((memory, index) => `
+      <button class="family-memory-item" type="button" data-memory-index="${index}">
+        <span>${escapeHtml(memory.source_file_name || memoryText('title'))}</span>
+        <span>${escapeHtml(memory.content.slice(0, 110))}</span>
+      </button>
+    `).join('');
+    history.querySelectorAll('[data-memory-index]').forEach((button, index) => {
+      button.addEventListener('click', () => {
+        root.querySelector('[data-memory-input]').value = memories[index].content;
+      });
+    });
+  } catch (error) {
+    history.innerHTML = `<p class="mvp-alert" role="alert">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+async function handleMemorySearch(event) {
+  event.preventDefault();
+  const input = root.querySelector('[data-memory-input]');
+  const button = root.querySelector('[data-action="search-memories"]');
+  const results = root.querySelector('[data-memory-results]');
+  const query = input.value.trim();
+  if (!query) {
+    showMemoryMessage(memoryText('emptyError'), true);
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = memoryText('searching');
+  results.innerHTML = `<p class="mvp-loading">${memoryText('searching')}</p>`;
+  try {
+    const data = await authenticatedApiRequest('/api/memories/search', 'POST', {
+      query,
+    });
+    const security = data.security || { isSafe: false, reason: 'Missing security result' };
+    const securityClass = security.isSafe ? 'security-badge-safe' : 'security-badge-blocked';
+    const securityLabel = security.isSafe
+      ? memoryText('securitySafe')
+      : memoryText('securityBlocked');
+    const finalAnswer = data.final?.answer || memoryText('resultEmpty');
+    const citations = Array.isArray(data.citations) ? data.citations : [];
+    const citationLabels = citations.map((id) => {
+      const memory = (data.memories || []).find((item) => item.id === id);
+      return memory?.source_file_name || id;
+    });
+    results.innerHTML = `
+        <h3>${memoryText('resultTitle')}</h3>
+        <p class="family-chat-search-mode">${escapeHtml(data.embedding?.model || '')} · ${escapeHtml(data.embedding?.mode || '')} · ${escapeHtml(data.embedding?.metric || 'cosine')} · ${escapeHtml(data.embedding?.modelPath || '')}</p>
+        <p class="${securityClass}" data-security-status role="status">
+          ${securityLabel} · ${memoryText('securityReason')}: ${escapeHtml(security.reason || '')}
+        </p>
+        <section class="family-chat-final-answer" aria-label="${memoryText('finalAnswer')}">
+          <h4>${memoryText('finalAnswer')}</h4>
+          <p>${escapeHtml(finalAnswer)}</p>
+          ${citationLabels.length ? `<div class="family-chat-final-citations">${citationLabels.map((label) => `
+            <span class="family-memory-citation">${memoryText('citation')}: ${escapeHtml(label)}</span>
+          `).join('')}</div>` : ''}
+        </section>
+        ${data.matches.length ? data.matches.slice(0, 5).map((memory) => `
+          <article class="family-memory-result" data-memory-citation>
+            <div class="family-memory-citation-meta">
+              <span class="family-memory-citation">${memoryText('citation')}</span>
+              <span>${memoryText('distance')}: ${Number(memory.distance).toFixed(3)}</span>
+            </div>
+            <p>${escapeHtml(memory.content)}</p>
+            <small>${memoryText('source')}: ${escapeHtml(memory.source_file_name || memoryText('title'))}
+              · ${memoryText('creator')}: ${escapeHtml(memory.metadata?.created_by || '')}
+              · ${memoryText('createdAt')}: ${escapeHtml(memory.metadata?.created_at ? formatDate(memory.metadata.created_at) : '')}</small>
+          </article>
+        `).join('') : `<p class="mvp-empty">${memoryText('resultEmpty')}</p>`}
+      `;
+    showMemoryMessage(memoryText('searched'));
+  } catch (error) {
+    results.innerHTML = `<p class="mvp-alert" role="alert">${escapeHtml(error.message)}</p>`;
+  } finally {
+    button.disabled = false;
+    button.textContent = memoryText('search');
+  }
+}
+
+async function handleMemorySave() {
+  const input = root.querySelector('[data-memory-input]');
+  const button = root.querySelector('[data-action="save-memory"]');
+  const content = input.value.trim();
+  if (!content) {
+    showMemoryMessage(memoryText('emptyError'), true);
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = memoryText('saving');
+  try {
+    await authenticatedApiRequest('/api/memories', 'POST', {
+      content,
+      sourceFile: root.dataset.memorySource || null,
+    });
+    root.dataset.memorySource = '';
+    root.querySelector('[data-memory-file]').value = '';
+    root.querySelector('[data-file-hint]').textContent = memoryText('fileHint');
+    input.value = '';
+    showMemoryMessage(memoryText('saved'));
+    await loadMemoryHistory();
+  } catch (error) {
+    showMemoryMessage(error.message, true);
+  } finally {
+    button.disabled = false;
+    button.textContent = memoryText('save');
+  }
+}
+
+async function loadMemoryFile(file) {
+  const extension = file.name.split('.').pop().toLowerCase();
+  if (!['txt', 'md', 'csv', 'json'].includes(extension)) {
+    showMemoryMessage(memoryText('fileTypeError'), true);
+    return;
+  }
+  if (file.size > 64 * 1024) {
+    showMemoryMessage(memoryText('fileSizeError'), true);
+    return;
+  }
+
+  try {
+    const content = await file.text();
+    if (content.length > 12000) {
+      showMemoryMessage(memoryText('fileContentTooLong'), true);
+      return;
+    }
+    root.querySelector('[data-memory-input]').value = content;
+    root.dataset.memorySource = file.name;
+    root.querySelector('[data-file-hint]').textContent = `${file.name} · ${memoryText('fileLoaded')}`;
+    showMemoryMessage(memoryText('fileLoaded'));
+  } catch (error) {
+    console.error('Could not read family memory text file:', error);
+    showMemoryMessage(memoryText('fileReadError'), true);
+  }
+}
+
+function localMidnightUtc(timeZone, dayOffset = 0) {
   const dateParts = new Intl.DateTimeFormat('en-US', {
     timeZone,
     year: 'numeric',
@@ -388,7 +970,11 @@ function localMidnightUtc(timeZone) {
     day: '2-digit',
   }).formatToParts(new Date());
   const date = Object.fromEntries(dateParts.map(({ type, value }) => [type, value]));
-  const targetWallTime = Date.UTC(Number(date.year), Number(date.month) - 1, Number(date.day));
+  const targetWallTime = Date.UTC(
+    Number(date.year),
+    Number(date.month) - 1,
+    Number(date.day) + dayOffset,
+  );
   let candidate = targetWallTime;
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -928,7 +1514,9 @@ export async function startMvpPages() {
       return;
     }
 
-    if (route === '/today') {
+    if (route === '/chat') {
+      renderFamilyChatPage();
+    } else if (route === '/today') {
       renderTodayPage();
     } else if (route === '/record/new') {
       renderNewRecordPage();

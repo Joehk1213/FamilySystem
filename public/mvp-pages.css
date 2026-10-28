@@ -293,12 +293,334 @@
   white-space: pre-wrap;
 }
 
+.family-overview {
+  display: grid;
+  gap: 14px;
+}
+
+.family-overview-heading h2,
+.family-overview-heading p {
+  margin: 0;
+}
+
+.family-overview-heading p {
+  margin-top: 5px;
+  color: #64748b;
+}
+
+.family-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.family-overview-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 4%);
+}
+
+.family-overview-card h3 {
+  margin: 0;
+}
+
+.family-overview-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.family-overview-list li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.family-overview-list li:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.family-overview-list time,
+.family-overview-list small {
+  display: block;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.family-overview-memory-list li {
+  display: grid;
+}
+
+.family-overview-memory-content {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.family-overview-reminder-form {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.family-overview-message {
+  margin: 0;
+}
+
 .mvp-change-form {
   display: grid;
   gap: 12px;
   margin-top: 18px;
   padding-top: 16px;
   border-top: 1px solid #e5e7eb;
+}
+
+.family-chat-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.72fr) minmax(0, 1.8fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.family-chat-sidebar,
+.family-chat-main {
+  min-width: 0;
+  padding: clamp(18px, 3vw, 26px);
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 4%);
+}
+
+.family-chat-sidebar-heading,
+.family-chat-heading,
+.family-chat-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.family-chat-sidebar-heading h2,
+.family-chat-heading h2,
+.family-chat-results h3 {
+  margin: 0;
+}
+
+.family-chat-sidebar-heading .mvp-button {
+  min-height: 36px;
+  padding: 6px 10px;
+}
+
+.family-chat-history {
+  display: grid;
+  gap: 8px;
+  max-height: 65vh;
+  margin-top: 16px;
+  overflow: auto;
+}
+
+.family-memory-item {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 11px;
+  background: #f8fafc;
+  color: #334155;
+  text-align: left;
+  cursor: pointer;
+}
+
+.family-memory-item span:first-child {
+  color: #4f46e5;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.family-memory-item span:last-child {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  white-space: pre-wrap;
+}
+
+.family-chat-heading {
+  align-items: flex-start;
+}
+
+.family-chat-heading h2 {
+  margin-bottom: 6px;
+}
+
+.family-chat-heading p {
+  margin: 0;
+  color: #64748b;
+}
+
+.family-chat-privacy {
+  margin: 18px 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 0.88rem;
+}
+
+.family-chat-results {
+  display: grid;
+  gap: 12px;
+  min-height: 132px;
+  max-height: 42vh;
+  padding: 14px;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.family-chat-results > .mvp-empty,
+.family-chat-results > .mvp-loading,
+.family-chat-results > .mvp-alert {
+  align-self: center;
+}
+
+.family-memory-result {
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.family-memory-result p {
+  margin: 0 0 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.family-memory-result small {
+  color: #64748b;
+}
+
+.family-chat-final-answer {
+  padding: 14px;
+  border: 1px solid #c7d2fe;
+  border-radius: 10px;
+  background: #f8faff;
+}
+
+.family-chat-final-answer h4,
+.family-chat-final-answer p {
+  margin: 0;
+}
+
+.family-chat-final-answer p {
+  margin-top: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.family-chat-final-citations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.security-badge-safe,
+.security-badge-blocked {
+  width: fit-content;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.security-badge-safe {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.security-badge-blocked {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.family-chat-search-mode {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.84rem;
+}
+
+.family-memory-citation-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.family-memory-citation {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-weight: 750;
+}
+
+.family-chat-composer {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.family-chat-drop {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px dashed #94a3b8;
+  border-radius: 11px;
+  background: #f8fafc;
+  cursor: pointer;
+}
+
+.family-chat-drop.is-dragging {
+  border-color: #4f46e5;
+  background: #eef2ff;
+}
+
+.family-chat-drop input {
+  max-width: 100%;
+}
+
+.family-chat-drop-title {
+  color: #334155;
+  font-weight: 700;
+}
+
+.family-chat-drop-hint {
+  color: #64748b;
+  font-size: 0.86rem;
+}
+
+.family-chat-message {
+  margin: 0;
 }
 
 @media (max-width: 640px) {
@@ -312,7 +634,25 @@
     overflow-x: auto;
   }
 
+  .family-overview-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .mvp-nav a {
     white-space: nowrap;
+  }
+
+  .family-chat-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .family-chat-sidebar {
+    order: 2;
+  }
+
+  .family-chat-heading,
+  .family-chat-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

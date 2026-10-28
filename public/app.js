@@ -3548,7 +3548,7 @@ async function loadApplication() {
 }
 
 setLanguage('zh');
-if (['/login', '/today', '/record/new', '/approve'].includes(window.location.pathname)) {
+if (['/login', '/today', '/record/new', '/approve', '/chat'].includes(window.location.pathname)) {
   import('./mvp-pages.js')
     .then(({ startMvpPages }) => startMvpPages())
     .catch((error) => {

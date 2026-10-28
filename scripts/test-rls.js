@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ path: process.env.DOTENV_CONFIG_PATH || '.env' });
 
 const { randomUUID } = require('node:crypto');
 const { createClient } = require('@supabase/supabase-js');
