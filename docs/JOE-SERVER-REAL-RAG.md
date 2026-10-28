@@ -4,12 +4,12 @@
 
 - **DESKTOP:** Development currently uses Cloud Supabase. Desktop-side data is under `C:\docker-data\family-system`. The local model directory `C:\docker-data\family-rag\models` is missing, so embeddings use the normalized 384-dimensional placeholder and `isPlaceholder()` returns `true`.
 - When the model directory or its `config.json` is missing, the application logs: `[RAG] Using placeholder embedding, model missing at <path>`. This is not a real BGE embedding.
-- **JOE-SERVER:** The local stack is deployed on `D:\docker-data\family-system`. Application tables remain empty; no Cloud data has been imported. See [JOE-SERVER-DEPLOY.md](./JOE-SERVER-DEPLOY.md).
-- The disposable DESKTOP stack is separate from the JOE-SERVER D: stack; no Cloud data was moved or imported.
+- **JOE-SERVER:** `D:\docker-data\family-system` remains empty; no DESKTOP C: or Cloud application data has been imported. The separate `D:\docker-data\family-rag\models` directory is reported ready with six local BGE model files for 512-dimensional embeddings. See [JOE-SERVER-DEPLOY.md](./JOE-SERVER-DEPLOY.md).
+- The D: model files do not mean the D: database has been populated. The disposable DESKTOP stack and Cloud development data remain separate.
 
-## 2. Target D: structure
+## 2. D: layout and environment
 
-Planned JOE-SERVER directories:
+JOE-SERVER paths:
 
 ```text
 D:\docker-data\family-system\postgres
@@ -46,23 +46,34 @@ FAMILY_RAG_MODEL_ROOT=D:\docker-data\family-rag\models
 - The database has separate vector dimensions by design: placeholder embeddings are normalized 384-dimensional vectors; the current real BGE path is 512-dimensional and uses `embedding_bge`. Keep each embedding paired with its matching column and search function.
 - **Approved compatibility plan:** use 512-dimensional local BGE embeddings with `embedding_bge` and retain 384-dimensional feature-hash placeholder embeddings with `embedding` for legacy/fallback use. Keep each embedding paired with its matching column and search function; do not mix vectors or change schema dimensions.
 - After provisioning valid local weights, verify `isPlaceholder()` is `false`, the reported embedding dimension is 512, and `npm run test:family-memories` passes with the real local embedding path. A passing placeholder-mode test does not prove that BGE weights are installed.
+- Search uses a cosine-distance threshold of `0.4`. The reported MEME negative-query case with distance `0.52` is fixed and is expected to be excluded.
 
 ## 5. Verification checklist
 
-- [ ] Run `scripts/export-images.ps1 -DryRun` (**not** `-WhatIf`); confirm all 5 required images are ready. Dry-run does not create directories or move data.
-- [ ] Run `docker compose --env-file .env.docker -f docker-compose.prod.yml config --quiet`.
-- [ ] Run `node --check source/rag/embed.js`.
-- [ ] Run `git diff --check`.
-- [ ] Run `npm run test:rls`; confirm 15/15 RLS tests pass.
-- [ ] Run `npm run test:family-memories`; confirm 10/10 checks pass in the selected embedding mode.
-- [ ] Run `npm run test:reminders`; confirm 5/5 checks pass.
-- [ ] Run `npm run test:agents`; confirm 3/3 checks pass.
-- [ ] Verify `/health`, `/chat`, and `/today` return HTTP 200.
-- [ ] Verify unauthenticated `POST /api/memories/ingest` returns HTTP 401.
-- [ ] Confirm the selected model mode and vector dimensions in logs and test output; do not mark REAL RAG verified while `isPlaceholder()` is `true`.
+JOE-SERVER results below reflect the deployment status supplied for this document update. They were not independently re-run from DESKTOP, which has no D: drive and no available Docker daemon.
+
+- [x] `scripts/export-images.ps1 -DryRun` (**not** `-WhatIf`): 5 images ready; dry-run does not create directories or move data.
+- [x] `docker compose --env-file .env.docker -f docker-compose.prod.yml config --quiet`.
+- [x] `node --check source/rag/embed.js`.
+- [x] `git diff --check`.
+- [x] RLS tests: 15/15.
+- [x] Family memories: 10/10 with local 512-dimensional BGE.
+- [x] Family reminders: 5/5.
+- [x] Agent tests: 3/3.
+- [x] `/api/health`, `/chat`, and `/today`: HTTP 200.
+- [x] Unauthenticated `POST /api/memories/ingest`: HTTP 401.
+- [x] Five JOE-SERVER containers reported healthy; model path reports local 512-dimensional BGE rather than placeholder.
+- [x] Cosine threshold `0.4` excludes the fixed MEME negative case at distance `0.52`.
+
+The five-container health, model load, and endpoint results are reported JOE-SERVER results, not observations from this DESKTOP session. Re-run them on JOE-SERVER before a production cutover.
 
 ## 6. Rollback
 
-- Keep all existing C: data intact. The JOE-SERVER D: deployment is new and remains a planning target until explicitly provisioned.
-- Do not move or delete C: data as part of setup or rollback. Do not cut over to D: until the local BGE load, matching 512-dimensional search path, migrations, RLS tests, and application checks have all passed.
-- If D: verification fails, stop the D: rollout and continue using the existing DESKTOP/Cloud development environment. Preserve logs and backups for diagnosis; do not describe placeholder results as REAL RAG.
+- Keep all existing C: data intact; do not copy, move, or delete it as part of this deployment.
+- If D: verification fails, stop the app and Compose services on JOE-SERVER without removing volumes or data directories. Preserve logs and backups for diagnosis.
+- Keep DESKTOP/Cloud development as a separate environment. Do not import data from C: or Cloud during rollback.
+- Resume D: only after correcting the issue and re-running the model, schema, RLS, and application checks. Do not describe placeholder results as REAL RAG.
+
+## 7. Encryption status
+
+The initial schema enables the `pgcrypto` extension, but no 14A encryption implementation is present in the pulled `main` history. Private-memory encryption remains unimplemented: there is no approved encryption/key-management design or `encrypted_content` column. An installed `pgcrypto` extension alone does not mean data is encrypted. Keep private-memory encryption out of the production claim until a separately approved implementation is merged and verified.

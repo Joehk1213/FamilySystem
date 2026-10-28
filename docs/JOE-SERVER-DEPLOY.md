@@ -1,12 +1,12 @@
 # JOE-SERVER 離線部署與 Docker image 匯入
 
-此文件描述未來在 JOE-SERVER 建立 Self-Host stack 的部署流程。按目前狀態，`D:\docker-data\family-system` 仍是空目錄／未部署的規劃目標，尚未在 server 建立 Postgres、Storage 或 RAG database。Compose image archive 只包含容器 images，不包含 `.env.docker`、key、database、Storage objects 或任何家庭資料。全程只用虛構 `@family-calendar.test` 帳戶；不要把 `.env.docker` 或真實家庭資料搬到 server。
+此文件描述 JOE-SERVER Self-Host stack 的部署流程。按最新部署回報，`D:\docker-data\family-system` 仍未匯入 application data；本機 BGE 權重已另行放在 `D:\docker-data\family-rag\models`。DESKTOP 的 `C:\docker-data\family-system` 保持獨立，不會因部署而搬移。Compose image archive 只包含容器 images，不包含 `.env.docker`、key、database、Storage objects 或任何家庭資料。全程只用虛構 `@family-calendar.test` 帳戶；不要把 `.env.docker` 或真實家庭資料搬到 server。
 
 ## DESKTOP 與 JOE-SERVER：磁碟及資料庫用途
 
 - **DESKTOP 沒有 D: 是預期配置。** 現階段 DESKTOP 開發使用 Cloud Supabase，桌面工作資料及本機工具使用 C:；如需本機 disposable stack，其資料根目錄亦使用 `C:\docker-data\family-system`。`SUPABASE_URL` 決定 app 連接 Cloud 或本機 Supabase；`FAMILY_DATA_ROOT` 只控制本機 Docker Compose self-hosted stack 的 bind mounts，不會改變 Cloud 資料位置。
 - `FAMILY_DATA_ROOT` 只指定本機 Docker Compose self-hosted stack 的 bind-mount 根目錄。DESKTOP 上把它設成 D: 並執行 `export-images.ps1 -DryRun`，只會驗證 Compose image 清單和設定路徑；腳本不檢查 D: 是否存在，也不建立目錄、不搬移資料。DESKTOP 的 D: 不存在屬正常，不要為 dry-run 建立 D:。
-- **JOE-SERVER 的 D: 目前仍是空的規劃目標。** 完成 DESKTOP 開發後，才按部署及備份／還原流程把所需 repository／部署材料帶到 JOE-SERVER；然後在 `D:\docker-data\family-system` 建立 Self-Host Postgres/Storage，套用 migrations 建立真正的 pgvector RAG database，並在 server 本機配置 `bge-small-zh-v1.5` 權重。這是預定後續階段，並非已在 JOE-SERVER 完成；Cloud Supabase 開發資料不會因設定 D: 自動搬過去。切換 `FAMILY_DATA_ROOT` 只改變 bind mount，不會遷移資料。
+- **JOE-SERVER D: application data 尚未匯入。** `D:\docker-data\family-system` 為目標 database/storage 根目錄；本機 `bge-small-zh-v1.5` 權重則位於獨立的 `D:\docker-data\family-rag\models`。模型檔準備不代表 Cloud/C: 資料已搬移，也不代表資料庫已有家庭資料。切換 `FAMILY_DATA_ROOT` 只改變 bind mount，不會遷移資料。
 
 ## 1. 在有 Docker images 的工作站匯出
 
@@ -118,9 +118,9 @@ npm start
 
 ## Family Memory 本機模型
 
-Family Memory 的模型檔只從本機載入，不會由 runtime 連外下載。Node.js 預設模型目錄為 C: disposable 環境的 `C:\docker-data\family-rag\models`；JOE-SERVER 使用 D: 時，將 `FAMILY_RAG_MODEL_PATH` 設為 `D:\docker-data\family-rag\models`。如模型放在其他本機目錄，亦可在 `.env.docker` 設定該變數。Node.js 使用 Transformers.js 本機 ONNX 模型；`scripts/rag/embed_worker.py` 提供 Python SentenceTransformers 批次工具，依賴安裝方式為 `python -m pip install -r requirements.txt`。
+Family Memory 的模型檔只從本機載入，不會由 runtime 連外下載。Node.js 預設模型目錄為 C: disposable 環境的 `C:\docker-data\family-rag\models`；JOE-SERVER 應在 `.env.docker` 設定 `FAMILY_RAG_MODEL_ROOT=D:\docker-data\family-rag\models`。此變數優先於舊的 `FAMILY_RAG_MODEL_PATH`；如兩者均未設定，程式回退至 C: 預設值。Node.js 使用 Transformers.js 本機 ONNX 模型；`scripts/rag/embed_worker.py` 提供 Python SentenceTransformers 批次工具，依賴安裝方式為 `python -m pip install -r requirements.txt`。
 
-本機 BGE 輸出為正規化 512 維向量；只有指定目錄包含 `config.json` 時才會嘗試載入，Transformers.js 設定 `local_files_only: true` 並停用 remote models，不會下載模型。模型目錄或設定檔不存在、載入／推論失敗時，會清楚記錄 `using placeholder` 並以舊 384 維本機 feature-hash 暫代；不可描述為 BGE 語義搜尋。C: 預設目錄目前未安裝模型，因此執行時預期為 placeholder。`/chat` 在瀏覽器本機讀取 `.txt`／`.md` 及 PDF 內嵌文字（不做 OCR、不上傳原檔），按 1,000 字元、200 字元重疊逐段送到登入保護的 `/api/memories/ingest`；不使用 Storage upload。提醒 scheduler 由後端每 15 分鐘檢查一小時內未完成提醒，只記錄提醒 ID、家庭 ID 及到期時間，不發送外部通知。批次上限 64 筆、每筆文字上限 12,000 字元；兩種搜尋均使用 cosine 距離並排除距離大於 0.75 的結果，資料庫最多取 12 筆，`/chat` 最多顯示 5 張引用卡。`npm run test:family-memories` 覆蓋 64/65 筆及 12,000/12,001 字元邊界；`npm run test:reminders` 覆蓋到期排序與完成切換。`scripts/init-family.sql` 由所有 migrations 按檔名排序產生，只有一組外層 `BEGIN`／`COMMIT`；已初始化資料庫只可用於 schema 檢查，不可重播該 bundle。部署前只使用 `@family-calendar.test` 虛構資料。
+本機 BGE 輸出為正規化 512 維向量；只有指定目錄包含 `config.json` 時才會嘗試載入，Transformers.js 設定 `local_files_only: true` 並停用 remote models，不會下載模型。模型目錄或設定檔不存在、載入／推論失敗時，會清楚記錄 placeholder 並以舊 384 維本機 feature-hash 暫代；不可描述為 BGE 語義搜尋。DESKTOP C: 預設目錄目前未安裝模型，因此執行時預期為 placeholder；JOE-SERVER 的六個本機模型檔及 512 維載入狀態屬部署回報，應在 server 按 [JOE-SERVER-REAL-RAG.md](./JOE-SERVER-REAL-RAG.md) 重驗。程式分別使用 384 維 `embedding` 與 512 維 `embedding_bge`，不可混用。`/chat` 在瀏覽器本機讀取 `.txt`／`.md` 及 PDF 內嵌文字（不做 OCR、不上傳原檔），按 1,000 字元、200 字元重疊逐段送到登入保護的 `/api/memories/ingest`；不使用 Storage upload。提醒 scheduler 由後端每 15 分鐘檢查一小時內未完成提醒，只記錄提醒 ID、家庭 ID 及到期時間，不發送外部通知。批次上限 64 筆、每筆文字上限 12,000 字元；cosine search 使用 0.4 門檻、資料庫最多取 12 筆，`/chat` 最多顯示 5 張引用卡。`npm run test:family-memories` 覆蓋 64/65 筆及 12,000/12,001 字元邊界；`npm run test:reminders` 覆蓋到期排序與完成切換。`scripts/init-family.sql` 由所有 migrations 按檔名排序產生，只有一組外層 `BEGIN`／`COMMIT`；已初始化資料庫只可用於 schema 檢查，不可重播該 bundle。部署前只使用 `@family-calendar.test` 虛構資料。
 
 私人記憶加密方案仍未決（見 `source/DB_DESIGN.md` 第 6 節）；目前資料只受既有 RLS 保護，未宣稱已加密。`pgcrypto` 只列為待評估候選，須先核准儲存、解鎖、搜尋與金鑰管理設計；現階段不新增加密欄位或改動既有 `content` 讀寫。
 
