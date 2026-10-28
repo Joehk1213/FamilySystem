@@ -101,6 +101,11 @@ async function loadLocalModel() {
           reportPlaceholder('the local model directory does not exist');
           return null;
         }
+        const modelConfigPath = path.join(modelPath, 'config.json');
+        if (!fs.existsSync(modelConfigPath) || !fs.statSync(modelConfigPath).isFile()) {
+          reportPlaceholder('config.json was not found in the local model directory');
+          return null;
+        }
 
         const { env, pipeline } = await import('@xenova/transformers');
         env.allowRemoteModels = false;
@@ -110,12 +115,13 @@ async function loadLocalModel() {
         const extractor = await pipeline(
           'feature-extraction',
           path.basename(modelPath),
-          { pooling: 'mean', normalize: true },
+          { pooling: 'mean', normalize: true, local_files_only: true },
         );
         const probe = await extractor('dimension check', { pooling: 'mean', normalize: true });
         normalizeVector(Array.from(probe.data), MODEL_EMBEDDING_DIMENSIONS);
         embeddingMode = 'local-bge-small-zh-v1.5';
         embeddingDimensions = MODEL_EMBEDDING_DIMENSIONS;
+        console.info('BGE local loaded');
         return extractor;
       } catch (error) {
         reportPlaceholder(error.message || String(error));
