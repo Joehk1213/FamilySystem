@@ -576,7 +576,8 @@
   font-size: 0.82rem;
 }
 
-.family-memory-citation {
+.family-memory-citation,
+.memory-citation {
   padding: 4px 8px;
   border-radius: 999px;
   background: #eef2ff;

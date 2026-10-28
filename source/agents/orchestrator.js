@@ -4,25 +4,39 @@ const { searchFamilyMemories } = require('./librarianAgent');
 const analystAgent = require('./analystAgent');
 const editorAgent = require('./editorAgent');
 
-async function runQueryOrchestrator(query, ctx) {
+async function runQueryOrchestrator(
+  query,
+  { familyId, profileId, supabaseClient } = {},
+) {
   const startedAt = performance.now();
   if (typeof query !== 'string' || !query.trim()) {
     throw new TypeError('Enter a non-empty search query.');
   }
-  if (!ctx?.familyId || !ctx?.userId || !ctx?.supabaseClient) {
-    throw new TypeError('Family, user, and authenticated Supabase context are required.');
+  if (!familyId || !profileId || !supabaseClient) {
+    throw new TypeError('Family, profile, and authenticated Supabase context are required.');
   }
 
-  const security = await checkInput(query, ctx);
+  const security = await checkInput(query, {
+    familyId,
+    profileId,
+    supabaseClient,
+  });
   if (!security.isSafe) {
     return {
       security,
       memories: [],
       analyst: null,
+      editor: {
+        blocked: true,
+        answer: '查詢已被安全檢查阻擋',
+        reason: security.reason,
+        final: '',
+      },
       final: {
         blocked: true,
         answer: '查詢已被安全檢查阻擋',
         reason: security.reason,
+        citations: [],
       },
       latencyMs: Math.round(performance.now() - startedAt),
     };
@@ -30,21 +44,37 @@ async function runQueryOrchestrator(query, ctx) {
 
   const safeQuery = query.slice(0, 2000);
   const memories = await searchFamilyMemories(safeQuery, {
-    familyId: ctx.familyId,
-    supabaseClient: ctx.supabaseClient,
-    metric: ctx.metric || 'cosine',
+    familyId,
+    supabaseClient,
+    topK: 5,
+    threshold: 0.75,
   });
   const analyst = analystAgent.analyze(safeQuery, memories);
-  const editorResult = editorAgent.validateAndFormat(analyst, memories);
+  const editor = editorAgent.validateAndFormat(analyst, memories);
   const final = memories.length === 0
-    && analyst.answer === analystAgent.NO_MEMORY_ANSWER
-    ? { blocked: false, answer: analyst.answer }
-    : editorResult;
+    ? {
+      blocked: false,
+      answer: analyst.answer,
+      citations: [],
+    }
+    : editor.blocked
+      ? {
+        blocked: true,
+        answer: editor.answer,
+        reason: editor.reason,
+        citations: [],
+      }
+      : {
+        blocked: false,
+        answer: editor.final,
+        citations: editor.citations,
+      };
 
   return {
     security,
     memories,
     analyst,
+    editor,
     final,
     latencyMs: Math.round(performance.now() - startedAt),
   };

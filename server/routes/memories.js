@@ -86,9 +86,9 @@ router.post('/api/memories/search', requireSupabaseUser, async (req, res) => {
 
     const { data: membership, error: membershipError } = await req.supabase
       .from('family_members')
-      .select('family_id, is_active, role')
+      .select('family_id, status, role')
       .eq('profile_id', req.user.id)
-      .eq('is_active', true)
+      .eq('status', 'active')
       .not('role', 'is', null)
       .maybeSingle();
     if (membershipError) {
@@ -100,21 +100,23 @@ router.post('/api/memories/search', requireSupabaseUser, async (req, res) => {
 
     const result = await runQueryOrchestrator(query.trim(), {
       familyId: membership.family_id,
-      userId: req.user.id,
+      profileId: req.user.id,
       supabaseClient: req.supabase,
-      metric: 'cosine',
     });
     const embeddingInfo = getEmbeddingInfo();
     console.info('Family memory search completed:', {
       modelPath: embeddingInfo.modelPath,
       metric: 'cosine',
-      source_file_name: result.memories.map((memory) => memory.source_file_name).filter(Boolean),
+      source_file: result.memories.map((memory) => memory.source_file).filter(Boolean),
     });
-    return apiSuccess(res, 200, {
+    const responseData = {
       ...result,
+      citations: result.final.citations || result.editor?.citations || result.analyst?.citations || [],
       matches: result.memories,
-      citations: result.analyst?.citations || [],
       embedding: embeddingInfo,
+    };
+    return apiSuccess(res, 200, {
+      ...responseData,
     }, 'Family memories searched.');
   } catch (error) {
     console.error('Family memory search request failed:', error);

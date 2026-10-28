@@ -4,13 +4,28 @@ require('dotenv').config({
 
 const { createClient } = require('@supabase/supabase-js');
 const {
+  MAX_BATCH_SIZE,
+  MAX_TEXT_LENGTH,
   embedText,
+  embedTexts,
   getEmbeddingInfo,
   getModelPath,
 } = require('../source/rag/embed');
 
 const TEST_EMAIL = 'test.dad@family-calendar.test';
 const TEST_CONTENT = 'Fictional family test memory: the blue kite is stored for Saturday.';
+
+async function expectRangeError(operation, message) {
+  try {
+    await operation();
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return;
+    }
+    throw error;
+  }
+  throw new Error(message);
+}
 
 function requireEnvironment() {
   const { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY } = process.env;
@@ -68,13 +83,13 @@ async function run() {
 
     const { data: membership, error: membershipError } = await userClient
       .from('family_members')
-      .select('status, role, is_active')
+      .select('family_id, status, role')
       .eq('profile_id', sessionData.user.id)
       .maybeSingle();
     if (membershipError) {
       throw membershipError;
     }
-    if (membership?.status !== 'active' || membership.is_active !== true || !membership.role) {
+    if (membership?.status !== 'active' || !membership.family_id || !membership.role) {
       throw new Error('The fictional test account must have an active family membership.');
     }
     checks += 1;
@@ -87,6 +102,23 @@ async function run() {
       || Math.abs(embeddingNorm - 1) > 1e-6) {
       throw new Error('Chinese text embedding must be normalized and match the reported model dimensions.');
     }
+    const boundaryBatch = await embedTexts(Array(MAX_BATCH_SIZE).fill('boundary'));
+    if (boundaryBatch.length !== MAX_BATCH_SIZE
+      || boundaryBatch.some((vector) => vector.length !== embeddingInfo.dimensions)) {
+      throw new Error(`An embedding batch of ${MAX_BATCH_SIZE} texts was not accepted.`);
+    }
+    await expectRangeError(
+      () => embedTexts(Array(MAX_BATCH_SIZE + 1).fill('boundary')),
+      `An embedding batch larger than ${MAX_BATCH_SIZE} texts was accepted.`,
+    );
+    const maxLengthEmbedding = await embedText('x'.repeat(MAX_TEXT_LENGTH));
+    if (maxLengthEmbedding.length !== embeddingInfo.dimensions) {
+      throw new Error(`Text of ${MAX_TEXT_LENGTH} characters did not produce an embedding.`);
+    }
+    await expectRangeError(
+      () => embedText('x'.repeat(MAX_TEXT_LENGTH + 1)),
+      `Text longer than ${MAX_TEXT_LENGTH} characters was accepted.`,
+    );
     checks += 1;
 
     const testEmbedding = await embedText(TEST_CONTENT);
@@ -173,13 +205,20 @@ async function run() {
     if (!searchResponse.ok || !searchResult.success) {
       throw new Error(searchResult.message || 'Authenticated family memory search failed.');
     }
+    if (!searchResult.data.security
+      || !Array.isArray(searchResult.data.memories)
+      || !Array.isArray(searchResult.data.citations)
+      || !searchResult.data.editor
+      || !searchResult.data.final) {
+      throw new Error('Memory search did not return the four-agent security and citation payload.');
+    }
     if (!searchResult.data.matches.some((match) => match.id === memoryId)) {
       throw new Error('Authenticated family memory search did not return the saved fixture.');
     }
     const match = searchResult.data.matches.find((item) => item.id === memoryId);
-    const metadata = match.metadata || match;
-    if (!Number.isFinite(match.distance) || match.source_file_name !== 'fictional-test.txt'
-      || !metadata.created_by || !metadata.created_at
+    if (!Number.isFinite(match.distance)
+      || (match.source_file || match.source_file_name) !== 'fictional-test.txt'
+      || !match.created_at
       || searchResult.data.embedding.modelPath !== getModelPath()) {
       throw new Error('Family memory search did not return citation distance and metadata.');
     }
@@ -197,7 +236,7 @@ async function run() {
     }
     checks += 1;
 
-    console.log(`Family memories integration: ${checks}/8 checks passed (active membership, normalized embeddings, same-family access, cosine citations, unrelated-query filtering).`);
+    console.log(`Family memories integration: ${checks}/8 checks passed (active membership, normalized embeddings, ${MAX_BATCH_SIZE}-text batch and ${MAX_TEXT_LENGTH}-character boundaries, same-family access, cosine citations, unrelated-query filtering).`);
   } finally {
     if (memoryId) {
       const { error: deleteError } = await adminClient

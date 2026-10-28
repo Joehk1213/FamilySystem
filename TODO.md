@@ -16,6 +16,7 @@
   - [ ] 待提供並驗證相容的本機 bge-small-zh-v1.5 權重；目前只有 placeholder 可用，搜尋結果只供虛構測試資料原型使用
   - [ ] 記憶內容目前由 RLS 隔離但未加密；不得輸入真實家庭或敏感個人資料，端對端／資料庫加密仍待另行設計
 - [x] Task 2.4: 【用戶已批准非 MVP 擴展】加入本機多代理記憶查詢流程：安全檢查及 `security_logs`、同家庭 RAG librarian、無外網 analyst、引用 editor 及 orchestrator；`/api/memories/search` 要求登入並回傳安全狀態、引用及 metadata；`/chat` 顯示安全 badge、回答及 MEMORY 引用。`source/DB_SCHEMA_DRAFT.sql` 未修改。
+  - [x] family-4agent-loop: 按 Security → Librarian → Analyst → Editor 次序落地 Node 防幻覺流程；以 `family_members.profile_id/status='active'` 驗證同家庭權限，強制 cosine 門檻、引用檢查及安全事件記錄。
   - [x] Local disposable 驗證：RLS 15/15、approval 3/3、family memories 8/8、reminders 5/5、agents 3/3；未登入搜尋 401，injection log 寫入後已清理
   - [x] Cloud Supabase Auth health endpoint 回 200；只送 anon key，沒有送出用戶資料
   - [ ] Cloud migration dry-run 尚未執行：此工作區未 link Supabase CLI project，亦未配置 Cloud database password；沒有對 Cloud 套用 migrations

@@ -8,10 +8,15 @@ function validateAndFormat(analystResult, memories) {
       blocked: true,
       answer: 'AI嘗試老作，已阻擋',
       reason: 'missing citation',
+      final: '',
     };
   }
 
-  return { blocked: false, answer: analystResult.answer };
+  return {
+    blocked: false,
+    final: analystResult.answer,
+    citations: analystResult.citations || [],
+  };
 }
 
 module.exports = { validateAndFormat };

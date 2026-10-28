@@ -6,27 +6,30 @@ async function searchFamilyMemories(
     familyId,
     supabaseClient,
     topK = 5,
-    metric = 'cosine',
+    threshold = 0.75,
   },
 ) {
   if (!familyId || !supabaseClient) {
     throw new TypeError('Family and authenticated Supabase context are required.');
+  }
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 2) {
+    throw new RangeError('Cosine distance threshold must be between 0 and 2.');
   }
 
   const { data: userResult, error: userError } = await supabaseClient.auth.getUser();
   if (userError) {
     throw userError;
   }
-  if (!userResult.user) {
+  if (!userResult?.user) {
     throw new Error('An authenticated user is required for family memory search.');
   }
 
   const { data: membership, error: membershipError } = await supabaseClient
     .from('family_members')
-    .select('family_id, is_active, role')
+    .select('family_id, status, role')
     .eq('profile_id', userResult.user.id)
     .eq('family_id', familyId)
-    .eq('is_active', true)
+    .eq('status', 'active')
     .not('role', 'is', null)
     .maybeSingle();
   if (membershipError) {
@@ -36,22 +39,22 @@ async function searchFamilyMemories(
     throw new Error('An active family membership is required for memory search.');
   }
 
-  const { data, error } = await searchRag(supabaseClient, query, topK, metric);
+  const { data, error } = await searchRag(supabaseClient, query, topK, 'cosine');
   if (error) {
     throw error;
   }
 
   return (data || [])
-    .filter((memory) => Number.isFinite(Number(memory.distance)) && Number(memory.distance) <= 0.75)
+    .filter((memory) => memory.distance !== null
+      && memory.distance !== undefined
+      && Number.isFinite(Number(memory.distance))
+      && Number(memory.distance) <= threshold)
     .map((memory) => ({
       id: memory.id,
       content: memory.content,
-      source_file_name: memory.source_file_name || memory.source_file || 'Family memory',
+      source_file: memory.source_file || memory.source_file_name || 'Family memory',
       distance: Number(memory.distance),
-      metadata: {
-        created_by: memory.created_by || null,
-        created_at: memory.created_at || null,
-      },
+      created_at: memory.created_at,
     }));
 }
 

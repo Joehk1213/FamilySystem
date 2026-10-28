@@ -509,12 +509,14 @@ async function loadFamilyOverview() {
       throw eventsResult.error;
     }
 
-    const dueReminders = reminders.filter((reminder) => (
-      !reminder.is_done
-      && reminder.due_at
-      && reminder.due_at >= start
-      && reminder.due_at < end
-    ));
+    const dueReminders = reminders
+      .filter((reminder) => (
+        !reminder.is_done
+        && reminder.due_at
+        && reminder.due_at >= start
+        && reminder.due_at < end
+      ))
+      .sort((left, right) => left.due_at.localeCompare(right.due_at));
     const recentMemories = memories.slice(0, 5);
     eventsBox.innerHTML = eventsResult.data.length
       ? `<ul class="family-overview-list">${eventsResult.data.map((record) => `
@@ -652,7 +654,10 @@ function memoryText(key) {
       securitySafe: '安全檢查：安全',
       securityBlocked: '安全檢查：已阻擋',
       securityReason: '原因',
+      riskScore: '風險分數',
       finalAnswer: '家庭記憶回答',
+      verifiedCitation: '已驗證引用',
+      answerBlocked: '回答已阻擋',
     },
     en: {
       title: 'Family Memory',
@@ -689,7 +694,10 @@ function memoryText(key) {
       securitySafe: 'Security check: safe',
       securityBlocked: 'Security check: blocked',
       securityReason: 'Reason',
+      riskScore: 'Risk score',
       finalAnswer: 'Family memory answer',
+      verifiedCitation: 'Citation verified',
+      answerBlocked: 'Answer blocked',
     },
   };
   return text[language][key];
@@ -859,40 +867,57 @@ async function handleMemorySearch(event) {
     const data = await authenticatedApiRequest('/api/memories/search', 'POST', {
       query,
     });
-    const security = data.security || { isSafe: false, reason: 'Missing security result' };
+    const memories = Array.isArray(data.memories)
+      ? data.memories
+      : Array.isArray(data.matches) ? data.matches : [];
+    const security = data.security || { isSafe: false, reason: 'Missing security result', riskScore: 1 };
     const securityClass = security.isSafe ? 'security-badge-safe' : 'security-badge-blocked';
     const securityLabel = security.isSafe
       ? memoryText('securitySafe')
       : memoryText('securityBlocked');
-    const finalAnswer = data.final?.answer || memoryText('resultEmpty');
-    const citations = Array.isArray(data.citations) ? data.citations : [];
+    const editor = data.editor || { blocked: data.final?.blocked === true };
+    const finalAnswer = data.final?.answer
+      || editor.final
+      || editor.answer
+      || memoryText('resultEmpty');
+    const finalBlocked = editor.blocked === true;
+    const finalBadgeClass = finalBlocked ? 'security-badge-blocked' : 'security-badge-safe';
+    const finalBadgeText = finalBlocked
+      ? memoryText('answerBlocked')
+      : memoryText('verifiedCitation');
+    const citations = Array.isArray(data.citations)
+      ? data.citations
+      : Array.isArray(editor.citations)
+        ? editor.citations
+        : data.analyst?.citations || [];
     const citationLabels = citations.map((id) => {
-      const memory = (data.memories || []).find((item) => item.id === id);
-      return memory?.source_file_name || id;
+      const memory = memories.find((item) => item.id === id);
+      return memory?.source_file || memory?.source_file_name || id;
     });
     results.innerHTML = `
         <h3>${memoryText('resultTitle')}</h3>
         <p class="family-chat-search-mode">${escapeHtml(data.embedding?.model || '')} · ${escapeHtml(data.embedding?.mode || '')} · ${escapeHtml(data.embedding?.metric || 'cosine')} · ${escapeHtml(data.embedding?.modelPath || '')}</p>
         <p class="${securityClass}" data-security-status role="status">
           ${securityLabel} · ${memoryText('securityReason')}: ${escapeHtml(security.reason || '')}
+          · ${memoryText('riskScore')}: ${Number(security.riskScore || 0).toFixed(2)}
         </p>
         <section class="family-chat-final-answer" aria-label="${memoryText('finalAnswer')}">
           <h4>${memoryText('finalAnswer')}</h4>
+          <span class="${finalBadgeClass}">${finalBadgeText}</span>
           <p>${escapeHtml(finalAnswer)}</p>
           ${citationLabels.length ? `<div class="family-chat-final-citations">${citationLabels.map((label) => `
-            <span class="family-memory-citation">${memoryText('citation')}: ${escapeHtml(label)}</span>
+            <span class="memory-citation">${memoryText('citation')}: ${escapeHtml(label)}</span>
           `).join('')}</div>` : ''}
         </section>
-        ${data.matches.length ? data.matches.slice(0, 5).map((memory) => `
+        ${memories.length ? memories.slice(0, 5).map((memory) => `
           <article class="family-memory-result" data-memory-citation>
             <div class="family-memory-citation-meta">
-              <span class="family-memory-citation">${memoryText('citation')}</span>
+              <span class="memory-citation">${memoryText('citation')}</span>
               <span>${memoryText('distance')}: ${Number(memory.distance).toFixed(3)}</span>
             </div>
             <p>${escapeHtml(memory.content)}</p>
-            <small>${memoryText('source')}: ${escapeHtml(memory.source_file_name || memoryText('title'))}
-              · ${memoryText('creator')}: ${escapeHtml(memory.metadata?.created_by || '')}
-              · ${memoryText('createdAt')}: ${escapeHtml(memory.metadata?.created_at ? formatDate(memory.metadata.created_at) : '')}</small>
+            <small>${memoryText('source')}: ${escapeHtml(memory.source_file || memory.source_file_name || memoryText('title'))}
+              · ${memoryText('createdAt')}: ${escapeHtml(memory.created_at ? formatDate(memory.created_at) : '')}</small>
           </article>
         `).join('') : `<p class="mvp-empty">${memoryText('resultEmpty')}</p>`}
       `;
