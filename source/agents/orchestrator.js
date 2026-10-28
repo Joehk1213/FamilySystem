@@ -47,7 +47,7 @@ async function runQueryOrchestrator(
     familyId,
     supabaseClient,
     topK: 5,
-    threshold: 0.75,
+    threshold: 0.4,
   });
   const analyst = analystAgent.analyze(safeQuery, memories);
   const editor = editorAgent.validateAndFormat(analyst, memories);

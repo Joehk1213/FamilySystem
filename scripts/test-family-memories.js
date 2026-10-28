@@ -4,6 +4,8 @@ require('dotenv').config({
 
 const { createClient } = require('@supabase/supabase-js');
 const { randomUUID } = require('node:crypto');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const {
   MAX_BATCH_SIZE,
   MAX_TEXT_LENGTH,
@@ -17,6 +19,61 @@ const {
 const TEST_EMAIL = 'test.dad@family-calendar.test';
 const TEST_CONTENT = 'Fictional family test memory: the blue kite is stored for Saturday.';
 const INGEST_SOURCE_FILE = `fictional-ingestion-${randomUUID()}.txt`;
+const INGEST_PDF_SOURCE_FILE = `fictional-ingestion-${randomUUID()}.pdf`;
+
+function createPdfFixture(text) {
+  const escapedText = text.replace(/([\\()])/g, '\\$1');
+  const content = `BT /F1 12 Tf 72 720 Td (${escapedText}) Tj ET`;
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${Buffer.byteLength(content, 'ascii')} >>\nstream\n${content}\nendstream`,
+  ];
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  for (let index = 0; index < objects.length; index += 1) {
+    offsets.push(Buffer.byteLength(pdf, 'ascii'));
+    pdf += `${index + 1} 0 obj\n${objects[index]}\nendobj\n`;
+  }
+  const xrefOffset = Buffer.byteLength(pdf, 'ascii');
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets.slice(1)) {
+    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return Buffer.from(pdf, 'ascii');
+}
+
+async function extractPdfText(buffer) {
+  const pdfjsPath = path.resolve('node_modules/pdfjs-dist/legacy/build/pdf.mjs');
+  const pdfjs = await import(pathToFileURL(pdfjsPath).href);
+  const loadingTask = pdfjs.getDocument({
+    data: new Uint8Array(buffer),
+    standardFontDataUrl: pathToFileURL(
+      `${path.resolve('node_modules/pdfjs-dist/standard_fonts')}${path.sep}`,
+    ).href,
+    isEvalSupported: false,
+  });
+  try {
+    const document = await loadingTask.promise;
+    const pages = [];
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+      const page = await document.getPage(pageNumber);
+      const textContent = await page.getTextContent();
+      pages.push(textContent.items
+        .map((item) => item.str)
+        .filter(Boolean)
+        .join(' ')
+        .trim());
+      page.cleanup();
+    }
+    return pages.filter(Boolean).join('\n');
+  } finally {
+    await loadingTask.destroy();
+  }
+}
 
 async function expectRangeError(operation, message) {
   try {
@@ -102,11 +159,12 @@ async function run() {
     const embedding = await embedText('藍色風箏');
     const embeddingNorm = Math.sqrt(embedding.reduce((sum, value) => sum + value * value, 0));
     const embeddingInfo = getEmbeddingInfo();
+    const expectedDimensions = isPlaceholder() ? 384 : 512;
     if (embedding.length !== embeddingInfo.dimensions
-      || ![384, 512].includes(embedding.length)
+      || embedding.length !== expectedDimensions
       || Math.abs(embeddingNorm - 1) > 1e-6
       || isPlaceholder() !== (embeddingInfo.mode === 'local-feature-hash-placeholder')) {
-      throw new Error('Chinese text embedding must be normalized and match the reported model dimensions.');
+      throw new Error(`Chinese text embedding must be normalized and contain ${expectedDimensions} dimensions for the selected model mode.`);
     }
     const boundaryBatch = await embedTexts(Array(MAX_BATCH_SIZE).fill('boundary'));
     if (boundaryBatch.length !== MAX_BATCH_SIZE
@@ -158,6 +216,23 @@ async function run() {
       'Fictional family ingestion test chunk two: test picnic checklist.',
       'Fictional family ingestion test chunk three: pretend Saturday plan.',
     ];
+    const pdfFixtureText = 'Fictional PDF fixture: pretend Saturday housekeeper reminder checklist.';
+    const extractedPdfText = await extractPdfText(createPdfFixture(pdfFixtureText));
+    if (!extractedPdfText.includes(pdfFixtureText)) {
+      throw new Error('Local PDF text extraction did not return the fictional fixture text.');
+    }
+    const ingestionItems = [
+      ...ingestionChunks.map((content, index) => ({
+        content,
+        source_file_name: INGEST_SOURCE_FILE,
+        metadata: { chunk_index: index + 1, chunk_count: ingestionChunks.length },
+      })),
+      {
+        content: extractedPdfText,
+        source_file_name: INGEST_PDF_SOURCE_FILE,
+        metadata: { chunk_index: 1, chunk_count: 1 },
+      },
+    ];
     const ingestionResponse = await fetch(`${appUrl}/api/memories/ingest`, {
       method: 'POST',
       headers: {
@@ -165,26 +240,27 @@ async function run() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        chunks: ingestionChunks.map((content, index) => ({
-          content,
-          source_file_name: INGEST_SOURCE_FILE,
-          metadata: { chunk_index: index + 1, chunk_count: ingestionChunks.length },
-        })),
+        chunks: ingestionItems,
       }),
     });
     const ingestionResult = await ingestionResponse.json();
     if (!ingestionResponse.ok || !ingestionResult.success
-      || ingestionResult.data.insertedCount !== ingestionChunks.length
-      || ingestionResult.data.items.length !== ingestionChunks.length
+      || ingestionResult.data.insertedCount !== ingestionItems.length
+      || ingestionResult.data.items.length !== ingestionItems.length
       || ingestionResult.data.items.some((memory, index) => (
-        memory.content !== ingestionChunks[index]
-        || memory.source_file_name !== INGEST_SOURCE_FILE
+        memory.content !== ingestionItems[index].content
+        || memory.source_file_name !== ingestionItems[index].source_file_name
         || memory.created_by !== sessionData.user.id
-        || memory.metadata?.chunk_index !== index + 1
+        || memory.metadata?.chunk_index !== ingestionItems[index].metadata.chunk_index
+        || memory.metadata?.chunk_count !== ingestionItems[index].metadata.chunk_count
       ))) {
       throw new Error(ingestionResult.message || 'Authenticated file-memory ingestion failed.');
     }
     memoryIds.push(...ingestionResult.data.items.map((memory) => memory.id));
+    if (ingestionResult.data.embedding.dimensions !== expectedDimensions
+      || ingestionResult.data.embedding.mode !== embeddingInfo.mode) {
+      throw new Error('Authenticated ingestion did not use the selected real-model embedding dimensions.');
+    }
     checks += 1;
 
     const historyResponse = await fetch(`${appUrl}/api/memories`, {
@@ -264,7 +340,9 @@ async function run() {
       || !Array.isArray(searchResult.data.memories)
       || !Array.isArray(searchResult.data.citations)
       || !searchResult.data.editor
-      || !searchResult.data.final) {
+      || !searchResult.data.final
+      || searchResult.data.embedding.dimensions !== expectedDimensions
+      || searchResult.data.embedding.mode !== embeddingInfo.mode) {
       throw new Error('Memory search did not return the four-agent security and citation payload.');
     }
     if (!searchResult.data.matches.some((match) => match.id === inserted.id)) {
@@ -276,6 +354,26 @@ async function run() {
       || !match.created_at
       || searchResult.data.embedding.modelPath !== getModelPath()) {
       throw new Error('Family memory search did not return citation distance and metadata.');
+    }
+    if (!searchResult.data.citations.includes(inserted.id)) {
+      throw new Error('Memory search did not cite the matching fictional family memory.');
+    }
+    const pdfSearchResponse = await fetch(`${appUrl}/api/memories/search`, {
+      method: 'POST',
+      headers: {
+        Authorization: authorization,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query: 'family housekeeper reminder' }),
+    });
+    const pdfSearchResult = await pdfSearchResponse.json();
+    const pdfCitation = pdfSearchResult.data?.matches?.find(
+      (memory) => memory.source_file === INGEST_PDF_SOURCE_FILE,
+    );
+    if (!pdfSearchResponse.ok || !pdfSearchResult.success
+      || !pdfCitation
+      || !pdfSearchResult.data.citations.includes(pdfCitation.id)) {
+      throw new Error('Family housekeeper reminder search did not cite the fictional PDF memory.');
     }
     const unrelatedResponse = await fetch(`${appUrl}/api/memories/search`, {
       method: 'POST',
@@ -291,7 +389,7 @@ async function run() {
     }
     checks += 1;
 
-    console.log(`Family memories integration: ${checks}/10 checks passed (active membership, normalized embeddings, ${MAX_BATCH_SIZE}-text batch and ${MAX_TEXT_LENGTH}-character boundaries, three-chunk authenticated ingestion, list citation metadata, same-family access, cosine citations, unrelated-query filtering).`);
+    console.log(`Family memories integration: ${checks}/10 checks passed (${embeddingInfo.mode}, ${embeddingInfo.dimensions}-dimensional normalized embeddings, ${MAX_BATCH_SIZE}-text batch and ${MAX_TEXT_LENGTH}-character boundaries, three text chunks plus locally extracted PDF ingestion, list metadata, same-family access, exact and PDF semantic citations, unrelated-query filtering).`);
   } finally {
     for (const memoryId of memoryIds) {
       const { error: deleteError } = await adminClient
@@ -307,7 +405,7 @@ async function run() {
         .from('family_memories')
         .delete()
         .eq('created_by', profileId)
-        .eq('source_file', INGEST_SOURCE_FILE);
+        .in('source_file', [INGEST_SOURCE_FILE, INGEST_PDF_SOURCE_FILE]);
       if (ingestionCleanupError) {
         throw ingestionCleanupError;
       }

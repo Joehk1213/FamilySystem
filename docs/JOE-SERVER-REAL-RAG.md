@@ -4,8 +4,8 @@
 
 - **DESKTOP:** Development currently uses Cloud Supabase. Desktop-side data is under `C:\docker-data\family-system`. The local model directory `C:\docker-data\family-rag\models` is missing, so embeddings use the normalized 384-dimensional placeholder and `isPlaceholder()` returns `true`.
 - When the model directory or its `config.json` is missing, the application logs: `[RAG] Using placeholder embedding, model missing at <path>`. This is not a real BGE embedding.
-- **JOE-SERVER:** `D:\docker-data\family-system` is empty and remains in the PLANNING stage; it has not been deployed. See [JOE-SERVER-DEPLOY.md](./JOE-SERVER-DEPLOY.md).
-- The five healthy containers on DESKTOP are the disposable local stack; they do not mean the JOE-SERVER D: stack has been created or that Cloud data has been moved.
+- **JOE-SERVER:** The local stack is deployed on `D:\docker-data\family-system`. Application tables remain empty; no Cloud data has been imported. See [JOE-SERVER-DEPLOY.md](./JOE-SERVER-DEPLOY.md).
+- The disposable DESKTOP stack is separate from the JOE-SERVER D: stack; no Cloud data was moved or imported.
 
 ## 2. Target D: structure
 
@@ -39,11 +39,12 @@ FAMILY_RAG_MODEL_ROOT=D:\docker-data\family-rag\models
 ## 4. BGE weights
 
 - Model: `BAAI/bge-small-zh-v1.5`.
-- Provision the compatible model files locally under `D:\docker-data\family-rag\models`; runtime inference must not download weights or call an external AI API.
+- Transformers.js-compatible files are provisioned locally from `Xenova/bge-small-zh-v1.5` (base model `BAAI/bge-small-zh-v1.5`), pinned to revision `75c43b069aac4d136ba6bc1122f995fedcfd2781`, under `D:\docker-data\family-rag\models`; runtime inference must not download weights or call an external AI API.
 - Required files include `config.json`, `tokenizer.json`, `tokenizer_config.json`, `onnx/model.onnx`, and `vocab.txt` (or the equivalent files required by the installed `@xenova/transformers` model layout).
+- The installed local model includes both `onnx/model.onnx` and `onnx/model_quantized.onnx`; `embed.js` loads locally with remote models disabled.
 - `embed.js` resolves the model path in this order: `FAMILY_RAG_MODEL_ROOT` > `FAMILY_RAG_MODEL_PATH` > C: default. It checks for `config.json` before attempting a local-only load with `local_files_only: true`. If the model is missing or loading fails, it uses the placeholder and logs the fallback explicitly.
 - The database has separate vector dimensions by design: placeholder embeddings are normalized 384-dimensional vectors; the current real BGE path is 512-dimensional and uses `embedding_bge`. Keep each embedding paired with its matching column and search function.
-- **Deployment blocker requiring separate approval:** confirm the compatibility plan for the 384-dimensional placeholder and 512-dimensional BGE paths before REAL RAG cutover. Do not mix vectors, alter dimensions, or change the schema/search path without that approval.
+- **Approved compatibility plan:** use 512-dimensional local BGE embeddings with `embedding_bge` and retain 384-dimensional feature-hash placeholder embeddings with `embedding` for legacy/fallback use. Keep each embedding paired with its matching column and search function; do not mix vectors or change schema dimensions.
 - After provisioning valid local weights, verify `isPlaceholder()` is `false`, the reported embedding dimension is 512, and `npm run test:family-memories` passes with the real local embedding path. A passing placeholder-mode test does not prove that BGE weights are installed.
 
 ## 5. Verification checklist

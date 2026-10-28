@@ -6,7 +6,7 @@ async function searchFamilyMemories(
     familyId,
     supabaseClient,
     topK = 5,
-    threshold = 0.75,
+    threshold = 0.4,
   },
 ) {
   if (!familyId || !supabaseClient) {

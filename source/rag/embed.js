@@ -129,7 +129,7 @@ async function loadLocalModel() {
         normalizeVector(Array.from(probe.data), MODEL_EMBEDDING_DIMENSIONS);
         embeddingMode = 'local-bge-small-zh-v1.5';
         embeddingDimensions = MODEL_EMBEDDING_DIMENSIONS;
-        console.info('BGE local loaded');
+        console.info(`[RAG] Using real BGE model at ${modelPath}`);
         return extractor;
       } catch (error) {
         reportPlaceholder(error.message || String(error));
