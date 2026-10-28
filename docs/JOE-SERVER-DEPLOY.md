@@ -1,12 +1,12 @@
 # JOE-SERVER 離線部署與 Docker image 匯入
 
-此流程在 JOE-SERVER 使用 `D:\docker-data\family-system` 保存 Postgres 與 Storage 資料。Compose image archive 只包含容器 images，不包含 `.env.docker`、key、database、Storage objects 或任何家庭資料。全程只用虛構 `@family-calendar.test` 帳戶；不要把 `.env.docker` 或真實家庭資料搬到 server。
+此文件描述未來在 JOE-SERVER 建立 Self-Host stack 的部署流程。按目前狀態，`D:\docker-data\family-system` 仍是空目錄／未部署的規劃目標，尚未在 server 建立 Postgres、Storage 或 RAG database。Compose image archive 只包含容器 images，不包含 `.env.docker`、key、database、Storage objects 或任何家庭資料。全程只用虛構 `@family-calendar.test` 帳戶；不要把 `.env.docker` 或真實家庭資料搬到 server。
 
 ## DESKTOP 與 JOE-SERVER：磁碟及資料庫用途
 
-- **DESKTOP 沒有 D: 是預期配置。** 桌面開發及 disposable 測試資料使用 C:（例如 `C:\docker-data\family-system`）；連接 Cloud Supabase 時，資料庫仍在遠端 Cloud，`FAMILY_DATA_ROOT` 不會改變 Cloud 資料位置。
+- **DESKTOP 沒有 D: 是預期配置。** 現階段 DESKTOP 開發使用 Cloud Supabase，桌面工作資料及本機工具使用 C:；如需本機 disposable stack，其資料根目錄亦使用 `C:\docker-data\family-system`。`SUPABASE_URL` 決定 app 連接 Cloud 或本機 Supabase；`FAMILY_DATA_ROOT` 只控制本機 Docker Compose self-hosted stack 的 bind mounts，不會改變 Cloud 資料位置。
 - `FAMILY_DATA_ROOT` 只指定本機 Docker Compose self-hosted stack 的 bind-mount 根目錄。DESKTOP 上把它設成 D: 並執行 `export-images.ps1 -DryRun`，只會驗證 Compose image 清單和設定路徑；腳本不檢查 D: 是否存在，也不建立目錄、不搬移資料。DESKTOP 的 D: 不存在屬正常，不要為 dry-run 建立 D:。
-- **JOE-SERVER 才使用 D: 作為 Self-Host pgvector 資料庫的目標儲存位置。** 在 server 設定 `FAMILY_DATA_ROOT=D:\docker-data\family-system` 後，Postgres volume 使用 `D:\docker-data\family-system\postgres`，Storage 使用 `D:\docker-data\family-system\storage`。這是 JOE-SERVER 自託管 stack 的持久資料，不是 Cloud Supabase 儲存。切換路徑只改變 bind mount，不會自動遷移既有 C: 資料；如需搬遷，先另行規劃並驗證備份／還原，勿直接複製或改 root 後假設資料已移動。
+- **JOE-SERVER 的 D: 目前仍是空的規劃目標。** 完成 DESKTOP 開發後，才按部署及備份／還原流程把所需 repository／部署材料帶到 JOE-SERVER；然後在 `D:\docker-data\family-system` 建立 Self-Host Postgres/Storage，套用 migrations 建立真正的 pgvector RAG database，並在 server 本機配置 `bge-small-zh-v1.5` 權重。這是預定後續階段，並非已在 JOE-SERVER 完成；Cloud Supabase 開發資料不會因設定 D: 自動搬過去。切換 `FAMILY_DATA_ROOT` 只改變 bind mount，不會遷移資料。
 
 ## 1. 在有 Docker images 的工作站匯出
 
