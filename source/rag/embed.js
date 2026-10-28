@@ -12,11 +12,13 @@ let embeddingDimensions = EMBEDDING_DIMENSIONS;
 let modelLoadPromise;
 
 function getModelPath() {
-  if (process.env.FAMILY_RAG_MODEL_PATH) {
-    return path.resolve(process.env.FAMILY_RAG_MODEL_PATH);
+  const configuredModelPath = process.env.FAMILY_RAG_MODEL_ROOT
+    || process.env.FAMILY_RAG_MODEL_PATH;
+  if (configuredModelPath) {
+    return path.resolve(configuredModelPath);
   }
 
-  return 'C:\\docker-data\\family-rag\\models';
+  return path.join('C:\\', 'docker-data', 'family-rag', 'models');
 }
 
 function isPlaceholder() {
@@ -92,18 +94,24 @@ function reportPlaceholder(reason) {
   );
 }
 
+function reportMissingModel(modelPath) {
+  embeddingMode = PLACEHOLDER_MODE;
+  embeddingDimensions = EMBEDDING_DIMENSIONS;
+  console.log('[RAG] Using placeholder embedding, model missing at', modelPath);
+}
+
 async function loadLocalModel() {
   if (!modelLoadPromise) {
     modelLoadPromise = (async () => {
       try {
         const modelPath = getModelPath();
         if (!fs.existsSync(modelPath) || !fs.statSync(modelPath).isDirectory()) {
-          reportPlaceholder('the local model directory does not exist');
+          reportMissingModel(modelPath);
           return null;
         }
         const modelConfigPath = path.join(modelPath, 'config.json');
         if (!fs.existsSync(modelConfigPath) || !fs.statSync(modelConfigPath).isFile()) {
-          reportPlaceholder('config.json was not found in the local model directory');
+          reportMissingModel(modelPath);
           return null;
         }
 
