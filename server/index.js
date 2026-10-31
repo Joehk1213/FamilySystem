@@ -24,27 +24,76 @@ function startServer() {
       .split(',')
       .map((origin) => origin.trim())
       .filter(Boolean);
-    const defaultCorsOrigins = ['http://127.0.0.1:3002'];
+    const defaultCorsOrigins = [
+      'http://127.0.0.1:3002',
+      'http://joe-server:3002',
+    ];
     const httpLoopbackOrigins = new Set([
       'http://localhost:3002',
       'http://localhost:3000',
       'http://127.0.0.1:3002',
       'http://127.0.0.1:3000',
     ]);
-    // Loopback HTTP requires explicit listing; production should use HTTPS, with 127.0.0.1:3002 as the sole default.
+    const isTailscaleIpv4 = (hostname) => {
+      const octets = hostname.split('.').map(Number);
+      return octets.length === 4
+        && octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)
+        && octets[0] === 100
+        && octets[1] >= 64
+        && octets[1] <= 127;
+    };
     const isAllowedCorsOrigin = (origin) => {
       try {
         const parsedOrigin = new URL(origin);
+        const hostname = parsedOrigin.hostname.toLowerCase();
+        if (hostname.endsWith('.invalid')) {
+          return false;
+        }
+
         if (parsedOrigin.protocol === 'http:') {
-          return ['localhost', '127.0.0.1'].includes(parsedOrigin.hostname)
+          if (
+            ['localhost', '127.0.0.1'].includes(hostname)
             && ['3000', '3002'].includes(parsedOrigin.port)
-            && parsedOrigin.origin === origin
-            && httpLoopbackOrigins.has(origin);
+            && httpLoopbackOrigins.has(origin)
+          ) {
+            return true;
+          }
+
+          return parsedOrigin.origin === origin
+            && ['3002', '8000'].includes(parsedOrigin.port)
+            && (
+              hostname === 'joe-server'
+              || isTailscaleIpv4(hostname)
+              || hostname.endsWith('.ts.net')
+            );
         }
 
         return parsedOrigin.protocol === 'https:'
+          && parsedOrigin.origin === origin;
+      } catch {
+        return false;
+      }
+    };
+    const isAllowedUnconfiguredNetworkOrigin = (origin) => {
+      try {
+        const parsedOrigin = new URL(origin);
+        const hostname = parsedOrigin.hostname.toLowerCase();
+        if (hostname.endsWith('.invalid')) {
+          return false;
+        }
+
+        if (parsedOrigin.protocol === 'https:') {
+          return hostname.endsWith('.ts.net') && parsedOrigin.origin === origin;
+        }
+
+        return parsedOrigin.protocol === 'http:'
           && parsedOrigin.origin === origin
-          && !parsedOrigin.hostname.toLowerCase().endsWith('.invalid');
+          && ['3002', '8000'].includes(parsedOrigin.port)
+          && (
+            hostname === 'joe-server'
+            || isTailscaleIpv4(hostname)
+            || hostname.endsWith('.ts.net')
+          );
       } catch {
         return false;
       }
@@ -59,7 +108,7 @@ function startServer() {
         if (!origin) {
           return callback(null, false);
         }
-        if (corsAllowedOrigins.has(origin)) {
+        if (corsAllowedOrigins.has(origin) || isAllowedUnconfiguredNetworkOrigin(origin)) {
           return callback(null, true);
         }
 
