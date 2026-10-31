@@ -2,6 +2,7 @@ const SUPABASE_MODULE_URL = 'https://esm.sh/@supabase/supabase-js@2.118.0';
 const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 const MVP_ROUTES = ['/login', '/today', '/record/new', '/approve', '/chat'];
 const root = document.querySelector('#app');
+let recentChatQueries = [];
 
 const labels = {
   zh: {
@@ -209,6 +210,7 @@ function renderShell(content, { page = '', showNav = true, notice = '' } = {}) {
   root.className = 'mvp-app';
   root.setAttribute('aria-busy', 'false');
   document.body.classList.add('mvp-pages-active');
+  document.body.classList.toggle('home-chat-active', page === '/chat');
 
   const role = membership?.role;
   const canCreate = ['admin', 'master', 'worker'].includes(role);
@@ -677,6 +679,16 @@ function memoryText(key) {
       history: '記憶紀錄',
       historyEmpty: '尚未加入家庭記憶。',
       historyLoading: '正在載入記憶…',
+      chatHistoryTitle: '對話記錄',
+      historyTab: '對話記錄',
+      memoryTab: 'MEMORY',
+      chatHistoryEmpty: '尚未搜尋任何家庭記憶。',
+      memoryChipsEmpty: '尚未載入家庭記憶。',
+      ragTitle: '家庭記憶',
+      ragThreshold: 'Cosine · 0.4',
+      dropPrivateBucket: 'Drop file to private bucket',
+      attachmentLabel: '已選附件',
+      storageNote: '原型目前只會本機擷取文字並加入家庭記憶；原始檔案不會上載至 Storage。',
       input: '輸入問題或要保存的文字',
       placeholder: '例如：測試家庭的虛構活動安排',
       file: '拖放或選取文字／PDF 檔',
@@ -720,6 +732,16 @@ function memoryText(key) {
       history: 'Memory history',
       historyEmpty: 'No family memories have been added.',
       historyLoading: 'Loading memories…',
+      chatHistoryTitle: 'History',
+      historyTab: 'History',
+      memoryTab: 'MEMORY',
+      chatHistoryEmpty: 'No family memory searches yet.',
+      memoryChipsEmpty: 'No family memories loaded.',
+      ragTitle: 'Family memories',
+      ragThreshold: 'Cosine · 0.4',
+      dropPrivateBucket: 'Drop file to private bucket',
+      attachmentLabel: 'Attached file',
+      storageNote: 'Prototype limitation: text is extracted locally for family memories; the original file is not uploaded to Storage.',
       input: 'Enter a question or text to save',
       placeholder: 'For example: a fictional activity plan for the test family',
       file: 'Drop or choose a text or PDF file',
@@ -762,19 +784,30 @@ function memoryText(key) {
 
 function renderFamilyChatPage() {
   renderShell(`
-    <section class="family-chat-layout">
-      <aside class="family-chat-sidebar" aria-label="${language === 'en' ? 'Memory history' : '家庭記憶紀錄'}">
+    <section class="family-chat-layout home-chat-layout">
+      <aside class="family-chat-sidebar home-sidebar" aria-label="${language === 'en' ? 'History and family memory' : '對話記錄及家庭記憶'}">
         <div class="family-chat-sidebar-heading">
-          <h2>${memoryText('history')}</h2>
+          <h2>${memoryText('chatHistoryTitle')}</h2>
           <button class="mvp-button mvp-button-secondary" type="button" data-action="refresh-memories">
             ${language === 'en' ? 'Refresh' : '重新載入'}
           </button>
         </div>
-        <div class="family-chat-history" data-memory-history aria-live="polite">
-          <p class="mvp-loading">${memoryText('historyLoading')}</p>
+        <div class="home-sidebar-tabs" role="group" aria-label="${language === 'en' ? 'Sidebar view' : '側欄檢視'}">
+          <button type="button" data-sidebar-view="history" aria-pressed="true">${memoryText('historyTab')}</button>
+          <button type="button" data-sidebar-view="memory" aria-pressed="false">${memoryText('memoryTab')}</button>
         </div>
+        <section class="home-sidebar-panel" data-sidebar-panel="history" aria-label="${memoryText('historyTab')}">
+          <div class="home-chat-history" data-chat-history aria-live="polite">
+            <p class="mvp-empty">${memoryText('chatHistoryEmpty')}</p>
+          </div>
+        </section>
+        <section class="home-sidebar-panel" data-sidebar-panel="memory" aria-label="${memoryText('memoryTab')}" hidden>
+          <div class="family-chat-history" data-memory-history aria-live="polite">
+            <p class="mvp-loading">${memoryText('historyLoading')}</p>
+          </div>
+        </section>
       </aside>
-      <section class="family-chat-main">
+      <section class="family-chat-main home-center">
         <header class="family-chat-heading">
           <div>
             <h2>${memoryText('title')}</h2>
@@ -786,16 +819,18 @@ function renderFamilyChatPage() {
         <section class="family-chat-results" data-memory-results aria-live="polite">
           <p class="mvp-empty">${memoryText('searchHint')}</p>
         </section>
-        <form class="family-chat-composer" data-family-chat-form>
+        <form class="family-chat-composer home-composer" data-family-chat-form>
           <label class="mvp-field" for="family-chat-input">
             ${memoryText('input')}
-            <textarea id="family-chat-input" data-memory-input maxlength="12000" rows="5"
+            <textarea id="family-chat-input" data-memory-input maxlength="12000" rows="1"
               placeholder="${memoryText('placeholder')}"></textarea>
           </label>
-          <label class="family-chat-drop" data-memory-drop>
+          <label class="family-chat-drop home-drop" data-memory-drop>
             <input type="file" data-memory-file accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf">
-            <span class="family-chat-drop-title">${memoryText('file')}</span>
+            <span class="family-chat-drop-title">${memoryText('dropPrivateBucket')}</span>
             <span class="family-chat-drop-hint" data-file-hint>${memoryText('fileHint')}</span>
+            <span class="home-storage-note">${memoryText('storageNote')}</span>
+            <span class="home-attachment-chip" data-attachment-chip hidden></span>
           </label>
           <div class="family-chat-actions">
             <button class="mvp-button" type="submit" data-action="search-memories">${memoryText('search')}</button>
@@ -804,15 +839,37 @@ function renderFamilyChatPage() {
           <p class="family-chat-message" data-memory-message role="status" hidden></p>
         </form>
       </section>
+      <section class="home-rag-panel" aria-label="${memoryText('ragTitle')}">
+        <div class="home-rag-heading">
+          <h3>${memoryText('ragTitle')}</h3>
+          <span>${memoryText('ragThreshold')}</span>
+        </div>
+        <div class="home-memory-chips" data-memory-chips aria-live="polite">
+          <p class="mvp-empty">${memoryText('memoryChipsEmpty')}</p>
+        </div>
+      </section>
     </section>
   `, { page: '/chat' });
 
   root.querySelector('[data-action="refresh-memories"]')
     .addEventListener('click', loadMemoryHistory);
+  root.querySelectorAll('[data-sidebar-view]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const activeView = button.dataset.sidebarView;
+      root.querySelectorAll('[data-sidebar-view]').forEach((tab) => {
+        tab.setAttribute('aria-pressed', String(tab === button));
+      });
+      root.querySelectorAll('[data-sidebar-panel]').forEach((panel) => {
+        panel.hidden = panel.dataset.sidebarPanel !== activeView;
+      });
+    });
+  });
   root.querySelector('[data-family-chat-form]')
     .addEventListener('submit', handleMemorySearch);
   root.querySelector('[data-action="save-memory"]')
     .addEventListener('click', handleMemorySave);
+  root.querySelector('[data-memory-input]')
+    .addEventListener('input', (event) => resizeMemoryInput(event.currentTarget));
   const fileInput = root.querySelector('[data-memory-file]');
   const dropTarget = root.querySelector('[data-memory-drop]');
   fileInput.addEventListener('change', () => {
@@ -835,7 +892,75 @@ function renderFamilyChatPage() {
       loadMemoryFile(file);
     }
   });
+  renderChatHistory();
   loadMemoryHistory();
+}
+
+function resizeMemoryInput(input = root.querySelector('[data-memory-input]')) {
+  if (!input) {
+    return;
+  }
+  input.style.height = 'auto';
+  input.style.height = `${Math.min(input.scrollHeight, 200)}px`;
+}
+
+function renderChatHistory() {
+  const history = root.querySelector('[data-chat-history]');
+  if (!history) {
+    return;
+  }
+  if (!recentChatQueries.length) {
+    history.innerHTML = `<p class="mvp-empty">${memoryText('chatHistoryEmpty')}</p>`;
+    return;
+  }
+  history.innerHTML = recentChatQueries.map((query, index) => `
+    <button class="family-memory-item home-history-item" type="button" data-chat-history-index="${index}">
+      <span>${escapeHtml(query.slice(0, 72))}</span>
+    </button>
+  `).join('');
+  history.querySelectorAll('[data-chat-history-index]').forEach((button, index) => {
+    button.addEventListener('click', () => {
+      const input = root.querySelector('[data-memory-input]');
+      input.value = recentChatQueries[index];
+      resizeMemoryInput(input);
+      input.focus();
+    });
+  });
+}
+
+function renderFamilyMemoryChips(memories) {
+  const chips = root.querySelector('[data-memory-chips]');
+  if (!chips) {
+    return;
+  }
+  if (!memories.length) {
+    chips.innerHTML = `<p class="mvp-empty">${memoryText('memoryChipsEmpty')}</p>`;
+    return;
+  }
+  chips.innerHTML = memories.slice(0, 12).map((memory, index) => `
+    <button class="home-memory-chip" type="button" data-rag-memory-index="${index}">
+      ${escapeHtml(memory.source_file_name || memory.source_file || memory.content.slice(0, 48))}
+    </button>
+  `).join('');
+  chips.querySelectorAll('[data-rag-memory-index]').forEach((button, index) => {
+    button.addEventListener('click', () => {
+      const input = root.querySelector('[data-memory-input]');
+      input.value = memories[index].content;
+      resizeMemoryInput(input);
+      input.focus();
+    });
+  });
+}
+
+function setAttachmentChip(file) {
+  const chip = root.querySelector('[data-attachment-chip]');
+  if (!chip) {
+    return;
+  }
+  chip.hidden = !file;
+  chip.textContent = file
+    ? `${memoryText('attachmentLabel')}: ${file.name} · ${(file.size / 1024).toFixed(1)} KB`
+    : '';
 }
 
 async function authenticatedApiRequest(url, method, body) {
@@ -886,6 +1011,7 @@ async function loadMemoryHistory() {
   history.innerHTML = `<p class="mvp-loading">${memoryText('historyLoading')}</p>`;
   try {
     const memories = await authenticatedApiRequest('/api/memories', 'GET');
+    renderFamilyMemoryChips(memories);
     if (!memories.length) {
       history.innerHTML = `<p class="mvp-empty">${memoryText('historyEmpty')}</p>`;
       return;
@@ -898,11 +1024,15 @@ async function loadMemoryHistory() {
     `).join('');
     history.querySelectorAll('[data-memory-index]').forEach((button, index) => {
       button.addEventListener('click', () => {
-        root.querySelector('[data-memory-input]').value = memories[index].content;
+        const input = root.querySelector('[data-memory-input]');
+        input.value = memories[index].content;
+        resizeMemoryInput(input);
+        input.focus();
       });
     });
   } catch (error) {
     history.innerHTML = `<p class="mvp-alert" role="alert">${escapeHtml(error.message)}</p>`;
+    renderFamilyMemoryChips([]);
   }
 }
 
@@ -957,6 +1087,8 @@ async function handleMemorySearch(event) {
     return;
   }
 
+  recentChatQueries = [query, ...recentChatQueries.filter((item) => item !== query)].slice(0, 12);
+  renderChatHistory();
   button.disabled = true;
   button.textContent = memoryText('searching');
   results.innerHTML = `<p class="mvp-loading">${memoryText('searching')}</p>`;
@@ -1046,7 +1178,9 @@ async function handleMemorySave() {
     root.dataset.memorySource = '';
     root.querySelector('[data-memory-file]').value = '';
     root.querySelector('[data-file-hint]').textContent = memoryText('fileHint');
+    setAttachmentChip(null);
     input.value = '';
+    resizeMemoryInput(input);
     showMemoryMessage(memoryText('saved'));
     await loadMemoryHistory();
   } catch (error) {
@@ -1074,6 +1208,7 @@ async function loadMemoryFile(file) {
     return;
   }
 
+  setAttachmentChip(file);
   const fileInput = root.querySelector('[data-memory-file]');
   const fileHint = root.querySelector('[data-file-hint]');
   let chunks = [];
