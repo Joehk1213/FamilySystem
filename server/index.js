@@ -50,7 +50,7 @@ function startServer() {
       }
     };
     const corsAllowedOrigins = new Set(
-      (configuredCorsOrigins.length ? configuredCorsOrigins : defaultCorsOrigins)
+      [...defaultCorsOrigins, ...configuredCorsOrigins]
         .filter(isAllowedCorsOrigin),
     );
 
