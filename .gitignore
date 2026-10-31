@@ -4,3 +4,6 @@ node_modules/
 !.env.example
 !.env.docker.example
 npm-debug.log*
+
+docs/obsidian/dt.log
+

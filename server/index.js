@@ -26,6 +26,7 @@ function startServer() {
       .filter(Boolean);
     const defaultCorsOrigins = [
       'http://127.0.0.1:3002',
+      'http://localhost:3002',
       'http://joe-server:3002',
     ];
     const httpLoopbackOrigins = new Set([
@@ -99,14 +100,14 @@ function startServer() {
       }
     };
     const corsAllowedOrigins = new Set(
-      [...defaultCorsOrigins, ...configuredCorsOrigins]
+      [...defaultCorsOrigins, ...httpLoopbackOrigins, ...configuredCorsOrigins]
         .filter(isAllowedCorsOrigin),
     );
 
     app.use(cors({
       origin(origin, callback) {
         if (!origin) {
-          return callback(null, false);
+          return callback(null, true);
         }
         if (corsAllowedOrigins.has(origin) || isAllowedUnconfiguredNetworkOrigin(origin)) {
           return callback(null, true);

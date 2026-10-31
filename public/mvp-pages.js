@@ -682,7 +682,7 @@ function memoryText(key) {
       chatHistoryTitle: '對話記錄',
       historyTab: '對話記錄',
       memoryTab: 'MEMORY',
-      chatHistoryEmpty: '尚未搜尋任何家庭記憶。',
+      chatHistoryEmpty: '暫時未有對話。',
       memoryChipsEmpty: '尚未載入家庭記憶。',
       ragTitle: '家庭記憶',
       ragThreshold: 'Cosine · 0.4',
@@ -735,7 +735,7 @@ function memoryText(key) {
       chatHistoryTitle: 'History',
       historyTab: 'History',
       memoryTab: 'MEMORY',
-      chatHistoryEmpty: 'No family memory searches yet.',
+      chatHistoryEmpty: 'No conversations yet',
       memoryChipsEmpty: 'No family memories loaded.',
       ragTitle: 'Family memories',
       ragThreshold: 'Cosine · 0.4',
@@ -827,9 +827,16 @@ function renderFamilyChatPage() {
           </label>
           <label class="family-chat-drop home-drop" data-memory-drop>
             <input type="file" data-memory-file accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf">
-            <span class="family-chat-drop-title">${memoryText('dropPrivateBucket')}</span>
-            <span class="family-chat-drop-hint" data-file-hint>${memoryText('fileHint')}</span>
-            <span class="home-storage-note">${memoryText('storageNote')}</span>
+            <span class="home-drop-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M12 15V4m0 0L8 8m4-4 4 4M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="home-drop-copy">
+              <span class="family-chat-drop-title">${memoryText('dropPrivateBucket')}</span>
+              <span class="family-chat-drop-hint" data-file-hint>${memoryText('fileHint')}</span>
+              <span class="home-storage-note">${memoryText('storageNote')}</span>
+            </span>
             <span class="home-attachment-chip" data-attachment-chip hidden></span>
           </label>
           <div class="family-chat-actions">
@@ -1091,7 +1098,12 @@ async function handleMemorySearch(event) {
   renderChatHistory();
   button.disabled = true;
   button.textContent = memoryText('searching');
-  results.innerHTML = `<p class="mvp-loading">${memoryText('searching')}</p>`;
+  results.innerHTML = `
+    <div class="home-typing-state" role="status">
+      <span class="home-typing-indicator" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span>${memoryText('searching')}</span>
+    </div>
+  `;
   try {
     const data = await authenticatedApiRequest('/api/memories/search', 'POST', {
       query,
