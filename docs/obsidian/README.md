@@ -5,3 +5,5 @@ DT + SERVER 共用 RECORD，兩邊 push/pull 都有
 - SERVER: 同樣 mklink
 
 Reports: GATEWAY-8000-FIX, GOOGLE-OAUTH-FIX, SERVER-PUSH, SERVER-DT-SYNC-FIX, DT-LOCALHOST-403-FIX
+
+Story / reading guide: [FamilySystem-Story.md](./FamilySystem-Story.md) — a human-readable introduction, not a live status page or runbook.

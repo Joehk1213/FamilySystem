@@ -1,5 +1,7 @@
 # FINAL PROD AUDIT - JOE-SERVER - 2026-10-30
 
+> Historical audit snapshot (2026-10-30). Release, container/health, encryption, BGE, and QA claims below are report statements for that point in time, not current verification. For ongoing operational guidance see [Production Notes](./PRODUCTION-README.md); this link does not replace the audit evidence.
+
 ## Release history
 Current release: v1.0-encrypted-real (3b1422a).
 

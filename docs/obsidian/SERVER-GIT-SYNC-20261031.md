@@ -1,5 +1,7 @@
 # JOE-SERVER Git Sync Report — 2026-10-31
 
+> Historical sync snapshot. The recorded `0810722` refs were followed by a push to `73aea2d` and later synchronization to `4999a73`. Superseded by: [SERVER-DT-SYNC-FIX-20261031.md](./SERVER-DT-SYNC-FIX-20261031.md) for the recorded Git ref/worktree snapshot only. The other checks below remain historical statements, not current verification.
+
 ## Result: SUCCESS — fast-forward and follow-up CORS fix pushed
 
 - Initial sync: `main` fast-forwarded from `3b1422a` to `da0b6b2` using `git pull --ff-only origin main` after preserving the pre-existing CORS edit in `stash@{0}`.

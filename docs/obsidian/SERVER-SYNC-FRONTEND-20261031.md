@@ -1,5 +1,7 @@
 # SERVER frontend sync report — 2026-10-31
 
+> Historical frontend sync snapshot (2026-10-31 22:38 +08:00). The later 22:40 report records the same `4999a73` refs and worktree check. Superseded by: [SERVER-DT-SYNC-FIX-20261031.md](./SERVER-DT-SYNC-FIX-20261031.md) for the synchronization snapshot only. Runtime results below remain historical and do not establish current state.
+
 Verified: 2026-10-31 22:38:42 +08:00
 Repository: `Joehk1213/FamilySystem`; branch `main`.
 

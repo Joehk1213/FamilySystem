@@ -1,5 +1,7 @@
 # SERVER update push report — 2026-10-31
 
+> Historical push snapshot (2026-10-31 22:34 +08:00). The recorded refs at `73aea2d` were followed by frontend synchronization to `4999a73`. Superseded by: [SERVER-DT-SYNC-FIX-20261031.md](./SERVER-DT-SYNC-FIX-20261031.md) for ref/worktree status only. The push details below remain evidence for that specific commit and time; they do not establish current state.
+
 Completed: 2026-10-31 22:34:09 +08:00
 Repository: `Joehk1213/FamilySystem`; branch `main`.
 

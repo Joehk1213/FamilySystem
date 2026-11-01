@@ -1,5 +1,7 @@
 # JOE-SERVER FamilySystem Production README - 2026-10-30
 
+> Historical snapshot (2026-10-30). The release, service health, encryption, OAuth, and environment statements below describe only the checks recorded at that time; they are not current-state verification. For ongoing operational guidance see [Production Notes](./PRODUCTION-README.md). Preserve this report as audit evidence.
+
 ## 老闆摘要
 
 - 目前版本：`v1.0-encrypted-real`，commit `3b1422a`。

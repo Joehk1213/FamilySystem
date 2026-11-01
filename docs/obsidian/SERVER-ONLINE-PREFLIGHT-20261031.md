@@ -1,5 +1,7 @@
 # JOE-SERVER SERVER ONLINE PREFLIGHT
 
+> Historical preflight snapshot (2026-10-31 13:10-13:13 +08:00). Its HOLD for the then-checked service/runtime/database acceptance was followed by the 14:03 ONLINE report. Superseded by: [SERVER-ONLINE-SUCCESS-20261031.md](./SERVER-ONLINE-SUCCESS-20261031.md) for that later snapshot only. The checkout and other findings here remain evidence for the earlier time and do not establish current state.
+
 **結果：HOLD — 本次執行環境未能確認 SERVER online。** 這是一份唯讀 preflight；未修復或啟動服務，未改 code、DB、ACL 或資料檔。
 
 - 檢查時間：2026-10-31 13:10-13:13 (+08:00)
