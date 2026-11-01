@@ -7,3 +7,6 @@ npm-debug.log*
 
 docs/obsidian/dt.log
 
+dt.log
+public/*.acl-backup
+run-backup.bat
