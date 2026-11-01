@@ -11,6 +11,19 @@
     <script type="module" src="/app.js"></script>
   </head>
   <body>
+    <header class="living-wall-topbar">
+      <a class="living-wall-brand" href="/" aria-label="Family Calendar home">FAMILY CALENDAR</a>
+      <div class="living-wall-account">
+        <span class="living-wall-notifications" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span class="living-wall-role" data-living-role>Master</span>
+        <span class="living-wall-email" data-living-email>gznhk1213@gmail.com</span>
+      </div>
+    </header>
+    <div class="living-photo-wall" aria-hidden="true"></div>
     <main class="page-shell">
       <header class="site-header">
         <a class="brand" href="/" aria-label="Family Calendar home">
@@ -56,5 +69,10 @@
         </button>
       </div>
     </template>
+    <script type="module">
+      import { startLivingPhotoWall } from './mvp-pages.js';
+
+      startLivingPhotoWall();
+    </script>
   </body>
 </html>

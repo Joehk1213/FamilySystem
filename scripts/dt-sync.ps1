@@ -27,7 +27,8 @@ Remove-Item 'dt.log','dt-npm-start.log','docs\obsidian\dt.log','docs\obsidian\dt
 git add docs/obsidian/
 git add scripts/
 git add .gitignore
-git add public/ server/ -ErrorAction SilentlyContinue
+git add public/
+git add server/
 
 $porcelain = git status --porcelain
 if ($porcelain) {

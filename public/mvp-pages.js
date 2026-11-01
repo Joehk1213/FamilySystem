@@ -1854,3 +1854,171 @@ export async function startMvpPages() {
     renderFatal(error);
   }
 }
+const LIVING_WALL_PHOTOS = [
+  'https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&w=320&q=70',
+  'https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?auto=format&fit=crop&w=320&q=70',
+  'https://images.unsplash.com/photo-1516627145497-ae6968895b74?auto=format&fit=crop&w=320&q=70',
+  'https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?auto=format&fit=crop&w=320&q=70',
+  'https://images.unsplash.com/photo-1511988617509-a57c8a288659?auto=format&fit=crop&w=320&q=70',
+  'https://images.unsplash.com/photo-1542038784456-1ea8e935640e?auto=format&fit=crop&w=320&q=70',
+  'https://images.unsplash.com/photo-1476703993599-0035a21b17a9?auto=format&fit=crop&w=320&q=70',
+  'https://images.unsplash.com/photo-1491013516836-7db643ee125a?auto=format&fit=crop&w=320&q=70',
+  'https://images.unsplash.com/photo-1511632765486-a01980e01a18?auto=format&fit=crop&w=320&q=70',
+  'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=320&q=70',
+  'https://images.unsplash.com/photo-1523438885200-e635ba2c371e?auto=format&fit=crop&w=320&q=70',
+  'https://images.unsplash.com/photo-1527529482837-4698179dc6ce?auto=format&fit=crop&w=320&q=70',
+];
+
+export function startLivingPhotoWall() {
+  const wall = document.querySelector('.living-photo-wall');
+  const app = document.querySelector('#app');
+  if (!wall || !app || wall.dataset.started === 'true') {
+    return;
+  }
+
+  wall.dataset.started = 'true';
+  document.body.classList.add('living-wall-active');
+  LIVING_WALL_PHOTOS.forEach((url) => {
+    const image = document.createElement('img');
+    image.src = url;
+    image.alt = '';
+    image.loading = 'eager';
+    image.decoding = 'async';
+    image.style.setProperty('--x', `${Math.random() * 100}vw`);
+    image.style.setProperty('--y', `${Math.random() * 100}vh`);
+    image.style.setProperty('--r', `${Math.random() * 24 - 12}deg`);
+    image.style.setProperty('--s', `${Math.round(80 + Math.random() * 140)}px`);
+    image.style.setProperty('--d', `${(8 + Math.random() * 7).toFixed(1)}s`);
+    image.addEventListener('error', () => image.remove(), { once: true });
+    wall.append(image);
+  });
+
+  document.addEventListener('pointermove', (event) => {
+    let hoveredImage = null;
+    let nearestDistance = Infinity;
+    wall.querySelectorAll('img').forEach((image) => {
+      const bounds = image.getBoundingClientRect();
+      const inside = event.clientX >= bounds.left
+        && event.clientX <= bounds.right
+        && event.clientY >= bounds.top
+        && event.clientY <= bounds.bottom;
+      if (!inside) {
+        return;
+      }
+      const distance = Math.hypot(
+        event.clientX - (bounds.left + bounds.width / 2),
+        event.clientY - (bounds.top + bounds.height / 2),
+      );
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        hoveredImage = image;
+      }
+    });
+    wall.querySelectorAll('img.is-hovered').forEach((image) => {
+      if (image !== hoveredImage) {
+        image.classList.remove('is-hovered');
+      }
+    });
+    hoveredImage?.classList.add('is-hovered');
+  });
+  document.addEventListener('pointerleave', () => {
+    wall.querySelectorAll('img.is-hovered').forEach((image) => {
+      image.classList.remove('is-hovered');
+    });
+  });
+
+  const updateAccount = () => {
+    const role = app.querySelector('.badge-role, .mvp-role-badge')?.textContent?.trim();
+    const email = app.querySelector('.account-email')?.textContent?.trim()
+      || app.querySelector('.account-line')?.textContent?.split(':').slice(1).join(':').trim();
+    if (role) {
+      document.querySelector('[data-living-role]').textContent = role;
+    }
+    if (email) {
+      document.querySelector('[data-living-email]').textContent = email;
+    }
+  };
+
+  const enhanceRecordEditor = () => {
+    const editor = app.querySelector('#record-editor');
+    const form = editor?.querySelector('#record-form');
+    if (!editor || !form || form.dataset.livingWallEnhanced === 'true') {
+      return;
+    }
+
+    editor.classList.add('living-record-editor');
+    form.dataset.livingWallEnhanced = 'true';
+    form.querySelector('#quick-chips')?.remove();
+    form.querySelector('#save-draft-locally')?.closest('label')?.remove();
+    const textarea = form.querySelector('#record-content');
+    if (textarea) {
+      textarea.rows = 1;
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.max(56, textarea.scrollHeight)}px`;
+    }
+
+    const composer = form.querySelector('.chat-composer');
+    if (composer) {
+      const more = document.createElement('details');
+      more.className = 'living-more';
+      const summary = document.createElement('summary');
+      summary.textContent = document.documentElement.lang === 'en' ? 'More options' : '更多功能';
+      more.append(summary);
+      composer.append(more);
+
+      [
+        composer.querySelector('#recurring-schedule-options'),
+        form.querySelector('#chat-drop-zone'),
+        form.querySelector('#chat-selected-files'),
+        editor.querySelector('#chat-local-parser-note'),
+      ].filter(Boolean).forEach((feature) => more.append(feature));
+    }
+
+    if (editor.dataset.livingDropBound !== 'true') {
+      editor.dataset.livingDropBound = 'true';
+      editor.addEventListener('dragover', (event) => {
+        if (!Array.from(event.dataTransfer?.types || []).includes('Files')) {
+          return;
+        }
+        event.preventDefault();
+        editor.classList.add('is-dragging');
+      });
+      editor.addEventListener('dragleave', (event) => {
+        if (!editor.contains(event.relatedTarget)) {
+          editor.classList.remove('is-dragging');
+        }
+      });
+      editor.addEventListener('drop', (event) => {
+        const files = Array.from(event.dataTransfer?.files || []);
+        const input = editor.querySelector('#record-files');
+        if (!input || files.length === 0) {
+          return;
+        }
+        event.preventDefault();
+        editor.classList.remove('is-dragging');
+        const transfer = new DataTransfer();
+        [...Array.from(input.files || []), ...files].forEach((file) => transfer.items.add(file));
+        input.files = transfer.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    }
+  };
+
+  document.addEventListener('input', (event) => {
+    const input = event.target;
+    if (!(input instanceof HTMLTextAreaElement)
+      || !input.matches('#record-content, [data-memory-input]')) {
+      return;
+    }
+    input.style.height = 'auto';
+    input.style.height = `${Math.max(56, input.scrollHeight)}px`;
+    document.body.classList.toggle('living-wall-typing', Boolean(input.value.trim()));
+  });
+
+  const syncApp = () => {
+    updateAccount();
+    enhanceRecordEditor();
+  };
+  new MutationObserver(syncApp).observe(app, { childList: true, subtree: true });
+  syncApp();
+}
